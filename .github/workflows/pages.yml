@@ -1,0 +1,63 @@
+# Publishes the game as a web page (GitHub Pages) so players only need a
+# link, and keeps the offline map pack fresh.
+# One-time setup: repository Settings → Pages → Source: "GitHub Actions".
+name: Publish game
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 18 1,15 * *" # 1st and 15th of each month, 03:23 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test
+        run: node --test tests/*.test.mjs
+      - name: Restore saved map data
+        uses: actions/cache/restore@v4
+        with:
+          path: data/service-cache
+          key: map-pack-${{ github.run_id }}
+          restore-keys: map-pack-
+      # Downloads what is missing and refreshes anything older than 30 days.
+      # Each run stops after 75 minutes; the next run continues.
+      - name: Build offline map pack
+        continue-on-error: true
+        run: node scripts/build-offline-pack.mjs --max-minutes 75 --refresh-days 30
+      - name: Save map data
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/service-cache
+          key: map-pack-${{ github.run_id }}
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude 'data/service-cache' \
+            --exclude 'node_modules' --exclude '*.bat' ./ _site/
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

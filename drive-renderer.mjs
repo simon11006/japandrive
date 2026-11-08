@@ -966,8 +966,10 @@ export class DriveRenderer {
   updateDisplays({ speed, gear, steer, navInfo, drawNavigation, parkingBrake, signal, time, blinker, blinkerLit }) {
     this.steeringWheel.rotation.z = -steer * 12;
     const blinkState = blinker && blinkerLit ? blinker : 0;
-    if (time - this.lastNav < 0.1 && blinkState === this.lastBlink) return;
-    this.lastNav = time;
+    // Real time, so the screen still updates while the game waits for roads.
+    const now = performance.now() / 1000;
+    if (now - this.lastNav < 0.1 && blinkState === this.lastBlink) return;
+    this.lastNav = now;
     this.lastBlink = blinkState;
     const c = this.nav.context,
       w = this.nav.canvas.width,

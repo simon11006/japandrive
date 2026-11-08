@@ -188,21 +188,53 @@ function renderVehicles() {
   );
 }
 
-// The page must be served by this game's own server (start-game.bat or
-// `node server.mjs`); another program on the same port can show the page but
-// cannot answer map requests.
-const WRONG_SERVER =
-  "이 주소에서는 다른 프로그램이 응답하고 있어 지도를 불러올 수 없습니다. 열려 있는 게임 서버 창을 모두 닫고 start-game.bat을 다시 실행해 주세요. 새 창에 표시되는 주소로 접속해야 합니다.";
+// The game works two ways. With its own server (start-game.bat or the
+// classroom server) map requests go through it. Opened as plain web pages
+// (GitHub Pages, any static host) each browser handles them itself
+// (direct-map.mjs). No installation is needed in that case.
 let serverOk = null;
-fetch("/api/health", { cache: "no-store" })
+const serverReady = fetch("api/health", { cache: "no-store" })
   .then((r) => r.json())
   .then((d) => (serverOk = d.app === "japan-drive"))
-  .catch(() => (serverOk = false))
-  .then(() => {
-    if (serverOk) return;
-    $("#intro-status").textContent = WRONG_SERVER;
-    $("#intro-status").classList.add("error");
-  });
+  .catch(() => (serverOk = false));
+let directMap = null;
+const direct = () => (directMap ??= import("./direct-map.mjs"));
+// Abort after `timeout` ms and translate failures into player-friendly text.
+async function guarded(task, signal, timeout) {
+  const controller = new AbortController(),
+    abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => controller.abort(new DOMException("timeout", "TimeoutError")), timeout);
+  try {
+    return await task(controller.signal);
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    if (controller.signal.aborted)
+      throw new Error("지도 서비스가 제한 시간 안에 응답하지 않았습니다. 다시 시도하거나 추천 코스를 선택해 주세요.");
+    if (error instanceof TypeError) throw new Error("지도 연결이 끊겼습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+async function mapRoute(start, end, signal) {
+  await serverReady;
+  if (serverOk) return json("api/route?" + new URLSearchParams({ start, end }), signal);
+  const { route } = await direct();
+  return guarded((s) => route(start, end, s), signal, 45000);
+}
+async function searchPlaces(q, options = {}, signal) {
+  await serverReady;
+  if (serverOk) {
+    const params = new URLSearchParams({ q });
+    if (Number.isFinite(options.lat)) params.set("lat", options.lat), params.set("lon", options.lon);
+    if (options.online === false) params.set("online", "0");
+    return json("api/places?" + params, signal, 20000);
+  }
+  const { places } = await direct();
+  return guarded((s) => places(q, options, s), signal, 20000);
+}
 async function json(url, signal, timeout = 30000) {
   const controller = new AbortController();
   let timedOut = false;
@@ -226,12 +258,7 @@ async function json(url, signal, timeout = 30000) {
       );
     if (error instanceof TypeError)
       throw new Error("지도 연결이 끊겼습니다. 연결을 확인한 뒤 다시 시도해 주세요.");
-    if (error instanceof SyntaxError)
-      throw new Error(
-        serverOk === false
-          ? WRONG_SERVER
-          : "지도 응답을 읽지 못했습니다. 게임 서버 창(start-game.bat)이 켜져 있는지 확인한 뒤 다시 시도해 주세요.",
-      );
+    if (error instanceof SyntaxError) throw new Error("지도 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.");
     throw error;
   } finally {
     clearTimeout(timer);
@@ -239,8 +266,12 @@ async function json(url, signal, timeout = 30000) {
   }
 }
 // Road and parking lookups can need a server fallback, so allow more time.
-const overpass = (query, signal) =>
-  json("/api/overpass?" + new URLSearchParams({ data: query }), signal, 90000);
+const overpass = async (query, signal) => {
+  await serverReady;
+  if (serverOk) return json("api/overpass?" + new URLSearchParams({ data: query }), signal, 90000);
+  const { mapQuery } = await direct();
+  return guarded((s) => mapQuery(query, s), signal, 90000);
+};
 
 function renderRegions() {
   $("#regions").replaceChildren(
@@ -435,7 +466,7 @@ async function loadRegion(next) {
       // Park the title car on the left shoulder so passing traffic flows by.
       pos = { x: pos.x - Math.cos(heading) * 3.4, y: pos.y - Math.sin(heading) * 3.4 };
       traffic = new TrafficSimulation(store.roads, signals, position, difficulty.cars);
-      $("#intro-status").textContent = serverOk === false ? WRONG_SERVER : "";
+      $("#intro-status").textContent = "";
       drawIntroMap();
     }
   } catch (error) {
@@ -1090,7 +1121,7 @@ $("#start").onclick = async () => {
       start: `${departure.lon},${departure.lat}`,
       end: `${target[0]},${target[1]}`,
     });
-    const data = await json("/api/route?" + query, abortSignal);
+    const data = await mapRoute(query.get("start"), query.get("end"), abortSignal);
     // Connected-island destinations use road routes; ferry legs are rejected.
     if (current !== session || attempt !== driveAttempt) return;
     routeInfo = validateRoute(data);
