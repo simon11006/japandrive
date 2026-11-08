@@ -34,6 +34,7 @@ import {
   insidePolygon,
   vehicleCorners,
   rectanglesOverlap,
+  blocksMove,
   nearestOnSegment,
   signalPhase,
   forward,
@@ -2243,17 +2244,21 @@ function frameBody(t) {
       }
       drivenDistance += distance(pos, previous);
       const body = vehicleCorners({ ...pos, heading }, car);
-      if (
-        speed > 0.1 &&
-        nearFeatures.some((f) => f.tags.building && body.some((p) => hitsBuilding(f, p)))
-      ) {
-        pos = { x: previous.x, y: previous.y };
-        sound.thud();
-        warnViolation(
-          scoreCard.add("collision", simulationTime),
-          "시설물과 접촉했습니다. 후진해서 간격을 확보하세요.",
-        );
-        speed = 0;
+      const wall =
+        Math.abs(speed) > 0.1 && nearFeatures.find((f) => f.tags.building && body.some((p) => hitsBuilding(f, p)));
+      if (wall) {
+        const before = vehicleCorners(previous, car).some((p) => hitsBuilding(wall, p));
+        if (blocksMove(previous, pos, wall.center, before)) {
+          pos = { x: previous.x, y: previous.y };
+          if (!before) {
+            sound.thud();
+            warnViolation(
+              scoreCard.add("collision", simulationTime),
+              "시설물과 접촉했습니다. 후진해서 간격을 확보하세요.",
+            );
+          }
+          speed = 0;
+        }
       }
       if (trainingMode !== "parking" && simulationTime % 1 < dt) {
         const lane = nearestRoad(pos),
@@ -2267,15 +2272,16 @@ function frameBody(t) {
       // Bodies never pass through each other. Only contact the player drove
       // into is scored; being touched while stopped is not.
       const contact = (traffic?.cars || []).find((n) => rectanglesOverlap({ ...pos, heading }, car, n, n));
-      if (contact) {
+      const touching = contact && rectanglesOverlap(previous, car, contact, contact);
+      if (contact && blocksMove(previous, pos, contact, touching)) {
         const moving = { ...previous, speed };
         pos = { x: previous.x, y: previous.y };
-        if (speed > 0.3 && simulationTime - lastCollision > 1.5) {
+        if (!touching && Math.abs(speed) > 0.3 && simulationTime - lastCollision > 1.5) {
           sound.thud();
           if (playerAtFault(moving, contact, gear))
             warnViolation(
               scoreCard.add("collision", simulationTime),
-              "차량과 접촉했습니다. 정차하고 주변을 확인하세요.",
+              "차량과 접촉했습니다. 후진하거나 핸들을 돌려 간격을 확보하세요.",
             );
           lastCollision = simulationTime;
         }

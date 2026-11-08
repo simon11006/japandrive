@@ -293,6 +293,7 @@ const EN = {
   "시설물과 접촉했습니다. 후진해서 간격을 확보하세요.": "You touched a structure. Reverse to make space.",
   "도로 가장자리입니다. 천천히 차도로 돌아오세요.": "You're at the road edge. Ease back onto the road.",
   "차량과 접촉했습니다. 정차하고 주변을 확인하세요.": "You touched another car. Stop and check around you.",
+  "차량과 접촉했습니다. 후진하거나 핸들을 돌려 간격을 확보하세요.": "You touched another car. Reverse or steer away to make space.",
   "빨간 신호에서는 정지선 앞에 멈춰 주세요.": "Stop before the line at a red light.",
   "목적지 주차장": "Destination car park",
   "주변을 직접 확인하세요": "Check your surroundings",

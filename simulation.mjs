@@ -77,6 +77,14 @@ export function parkingStatus(state, car, bay, heldSeconds = 0) {
   const ready = inside && aligned && stopped && state.parkingBrake;
   return { inside, aligned, stopped, angle, ready, complete: ready && heldSeconds >= 2 };
 }
+// A move into an obstacle is undone. But when the car was already touching it
+// (another car stopped against it, an approximate map footprint), only moves
+// that bring it closer are undone, so the driver can always back or steer
+// away instead of being stuck for good.
+export function blocksMove(previous, next, obstacle, touchingBefore) {
+  if (!touchingBefore) return true;
+  return distance(next, obstacle) <= distance(previous, obstacle) + 1e-6;
+}
 export function rectanglesOverlap(a, carA, b, carB) {
   const ac = vehicleCorners(a, carA),
     bc = vehicleCorners(b, carB);

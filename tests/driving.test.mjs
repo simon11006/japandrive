@@ -304,3 +304,19 @@ test("turn signal duty follows real turns, and contact fault depends on who move
   assert.equal(playerAtFault(player, { x: 0, y: 5 }, -1), true, "reversed into a car");
   assert.equal(playerAtFault({ ...player, speed: 0 }, { x: 0, y: -5 }, 1), false, "stationary");
 });
+
+test("after a contact the player can always drive away, never deeper", async () => {
+  const { blocksMove, rectanglesOverlap } = await import("../simulation.mjs");
+  const car = VEHICLES[0];
+  const other = { x: 0, y: -3, heading: 0, length: 4.5, width: 1.8 };
+  const fresh = { x: 0, y: 4, heading: 0 },
+    into = { x: 0, y: 3.9, heading: 0 };
+  // A new contact is always undone.
+  assert.equal(blocksMove(fresh, into, other, false), true);
+  // Already touching (an AI car stopped against us): pushing further is
+  // undone, backing away is allowed, so the two cars cannot lock up.
+  const stuck = { x: 0, y: 1.5, heading: 0 };
+  assert.ok(rectanglesOverlap(stuck, car, other, other));
+  assert.equal(blocksMove(stuck, { x: 0, y: 1.4, heading: 0 }, other, true), true);
+  assert.equal(blocksMove(stuck, { x: 0, y: 1.6, heading: 0 }, other, true), false);
+});
