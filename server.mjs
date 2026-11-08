@@ -9,7 +9,21 @@ import { networkInterfaces } from "node:os";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const cache = new Map();
-const maps = createMapService({ cacheDir: resolve(root, "data/service-cache") });
+// Bundled road snapshots also feed the built-in router.
+const bundledRoads = async () =>
+  (
+    await Promise.all(
+      ["preview-cache.json", "signal-roads.json", "aqua-roads.json"].map((f) =>
+        readFile(resolve(root, "data", f), "utf8")
+          .then((t) => {
+            const d = JSON.parse(t);
+            return (d.roads || d).elements.filter((e) => e.type === "way" && e.geometry);
+          })
+          .catch(() => []),
+      ),
+    )
+  ).flat();
+const maps = createMapService({ cacheDir: resolve(root, "data/service-cache"), extraRoads: bundledRoads });
 let queue = Promise.resolve();
 // Static files: read, hashed and gzip-compressed once per change, so dozens
 // of players loading the game at the same time cost little CPU and the
@@ -31,6 +45,36 @@ async function staticFile(path) {
     };
   files.set(path, entry);
   return entry;
+}
+// Finished API replies (map tiles, routes) are kept serialised and
+// compressed, keyed by request URL, so hundreds of players asking for the
+// same area cost one JSON.stringify and one gzip, not hundreds.
+const replies = new Map();
+function sendJson(req, res, data) {
+  const key = req.url;
+  let entry = replies.get(key);
+  if (!entry) {
+    const body = Buffer.from(JSON.stringify(data));
+    entry = {
+      body,
+      gzip: body.length > 1024 ? gzipSync(body, { level: 6 }) : null,
+      etag: `"${createHash("sha1").update(body).digest("base64url")}"`,
+    };
+    replies.set(key, entry);
+    while (replies.size > 300) replies.delete(replies.keys().next().value);
+  } else {
+    replies.delete(key);
+    replies.set(key, entry);
+  }
+  const headers = { "Content-Type": "application/json; charset=utf-8", ETag: entry.etag, Vary: "Accept-Encoding" };
+  if (req.headers?.["if-none-match"] === entry.etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  const gzip = entry.gzip && /\bgzip\b/.test(req.headers?.["accept-encoding"] || "");
+  res.writeHead(200, gzip ? { ...headers, "Content-Encoding": "gzip" } : headers);
+  res.end(gzip ? entry.gzip : entry.body);
 }
 // Bundled snapshots are read from disk once, not on every request.
 const snapshots = new Map();
@@ -101,8 +145,7 @@ export const createRequestHandler =
           throw new Error("잘못된 지도 요청입니다.");
         const preview = await snapshot("preview-cache.json");
         if (preview?.query === query) {
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify(preview.roads));
+          sendJson(req, res, preview.roads);
           return;
         }
         if (query.includes("[highway~")) {
@@ -123,8 +166,7 @@ export const createRequestHandler =
                 sources.flatMap((s) => s.roads.elements).map((e) => [e.type + "/" + e.id, e]),
               ).values(),
             ];
-            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ elements }));
+            sendJson(req, res, { elements });
             return;
           }
         }
@@ -145,8 +187,7 @@ export const createRequestHandler =
           data = await pending;
         }
         if (res.destroyed) return;
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify(data));
+        sendJson(req, res, data);
         return;
       }
       // Lets the page confirm it is talking to this game's server, not another
@@ -167,22 +208,19 @@ export const createRequestHandler =
         const same = (s, coords) => s.split(",").every((v, i) => Math.abs(Number(v) - coords[i]) < 1e-7);
         const saved = training?.routes.find((r) => same(start, r.start) && same(end, r.end));
         if (saved) {
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify(saved.data));
+          sendJson(req, res, saved.data);
           return;
         }
         const preview = await snapshot("preview-cache.json");
         if (preview?.start === start && preview?.end === end) {
-          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify(preview.route));
+          sendJson(req, res, preview.route);
           return;
         }
         const upstream = new URL(`https://router.project-osrm.org/route/v1/driving/${start};${end}`);
         upstream.search = "overview=full&geometries=geojson&steps=true";
         const data = await request(upstream, 28000, requestAbort.signal);
         if (res.destroyed) return;
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify(data));
+        sendJson(req, res, data);
         return;
       }
       const path = resolve(
@@ -242,33 +280,50 @@ export function listen(server, port = 8000, last = 8010, host = "127.0.0.1") {
   });
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  // HOST=0.0.0.0 shares the game with other PCs on the same network
-  // (start-classroom-server.bat). The default only serves this PC.
-  const host = process.env.HOST || "127.0.0.1",
-    server = http.createServer(createRequestHandler());
-  server.keepAliveTimeout = 5000;
-  server.headersTimeout = 10000;
-  const port = await listen(server, Number(process.env.PORT) || 8000, 8010, host);
-  const address = `http://127.0.0.1:${port}`;
-  console.log(`JAPAN DRIVE: ${address}`);
-  if (host === "0.0.0.0") {
-    const lan = Object.values(networkInterfaces())
-      .flat()
-      .filter((n) => n && n.family === "IPv4" && !n.internal)
-      .map((n) => `http://${n.address}:${port}`);
-    console.log("같은 네트워크의 다른 PC에서는 아래 주소로 접속하세요:");
-    for (const a of lan) console.log("  " + a);
-    console.log("Windows 방화벽 허용 창이 뜨면 '개인 네트워크'를 허용하세요.");
-  }
-  console.log("이 창을 닫으면 게임 서버가 꺼집니다.");
-  if (process.argv.includes("--open")) {
-    const { spawn } = await import("node:child_process");
-    const [command, args] =
-      process.platform === "win32"
-        ? ["cmd", ["/c", "start", "", address]]
-        : process.platform === "darwin"
-          ? ["open", [address]]
-          : ["xdg-open", [address]];
-    spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+  // The server runs as worker processes under a small supervisor: classroom
+  // mode uses every CPU core (up to 8), and a worker that ever crashes is
+  // replaced at once, so players keep playing.
+  const { default: cluster } = await import("node:cluster");
+  const { availableParallelism } = await import("node:os");
+  const host = process.env.HOST || "127.0.0.1";
+  if (cluster.isPrimary) {
+    const count = Number(process.env.WORKERS) || (host === "0.0.0.0" ? Math.min(availableParallelism(), 8) : 1);
+    // Find a free port first (8000, or the next one), then share it.
+    const probe = http.createServer();
+    const port = await listen(probe, Number(process.env.PORT) || 8000, 8010, host);
+    await new Promise((r) => probe.close(r));
+    const fork = () => cluster.fork({ PORT: String(port), JD_WORKER: "1" });
+    for (let i = 0; i < count; i++) fork();
+    cluster.on("exit", (worker, code) => {
+      if (code !== 0) console.log("게임 서버 작업자가 멈춰서 바로 다시 시작합니다.");
+      fork();
+    });
+    const address = `http://127.0.0.1:${port}`;
+    console.log(`JAPAN DRIVE: ${address}  (작업자 ${count}개)`);
+    console.log("이 창을 닫으면 게임 서버가 꺼집니다.");
+    if (host === "0.0.0.0") {
+      const lan = Object.values(networkInterfaces())
+        .flat()
+        .filter((n) => n && n.family === "IPv4" && !n.internal)
+        .map((n) => `http://${n.address}:${port}`);
+      console.log("같은 네트워크의 다른 PC에서는 아래 주소로 접속하세요:");
+      for (const a of lan) console.log("  " + a);
+      console.log("Windows 방화벽 허용 창이 뜨면 '개인 네트워크'를 허용하세요.");
+    }
+    if (process.argv.includes("--open")) {
+      const { spawn } = await import("node:child_process");
+      const [command, args] =
+        process.platform === "win32"
+          ? ["cmd", ["/c", "start", "", address]]
+          : process.platform === "darwin"
+            ? ["open", [address]]
+            : ["xdg-open", [address]];
+      spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+    }
+  } else {
+    const server = http.createServer(createRequestHandler());
+    server.keepAliveTimeout = 5000;
+    server.headersTimeout = 10000;
+    server.listen(Number(process.env.PORT), host);
   }
 }

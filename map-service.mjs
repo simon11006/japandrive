@@ -1,6 +1,8 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { readdir } from "node:fs/promises";
+import { buildGraph, localRoute, metres } from "./local-router.mjs";
 const HIGHWAYS = new Set(
   "motorway trunk primary secondary tertiary unclassified residential living_street service motorway_link trunk_link primary_link secondary_link tertiary_link".split(
     " ",
@@ -108,7 +110,12 @@ export function selectMapQuery(data, query) {
     }),
   };
 }
-export function createMapService({ fetcher = fetch, cacheDir = resolve("data/service-cache") } = {}) {
+export function createMapService({
+  fetcher = fetch,
+  cacheDir = resolve("data/service-cache"),
+  extraRoads = async () => [],
+  packTiles = 400,
+} = {}) {
   // Recent responses stay in memory (bounded); everything is also on disk.
   const memory = new Map(),
     pending = new Map(),
@@ -311,33 +318,86 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
     }
     return selectMapQuery(merge(results), query);
   }
+  // Road graph for the built-in router: every saved road tile (from play or
+  // from the offline map pack) plus bundled road snapshots. Rebuilt when the
+  // number of saved tiles changes.
+  let graph = null,
+    graphTiles = -1,
+    graphLoading = null;
+  async function roadGraph() {
+    let files = [];
+    try {
+      files = (await readdir(cacheDir)).filter((f) => f.endsWith(".json"));
+    } catch {}
+    if (graph && files.length === graphTiles) return graph;
+    if (graphLoading) return graphLoading;
+    graphLoading = (async () => {
+      const ways = [...(await extraRoads())];
+      let tiles = 0;
+      for (const f of files) {
+        try {
+          const saved = JSON.parse(await readFile(resolve(cacheDir, f), "utf8"));
+          if (!String(saved.source).startsWith("roads:")) continue;
+          tiles++;
+          ways.push(...saved.data.elements.filter((e) => e.type === "way"));
+        } catch {}
+      }
+      graph = buildGraph(ways);
+      graph.tiles = tiles;
+      graphTiles = files.length;
+      return graph;
+    })().finally(() => (graphLoading = null));
+    return graphLoading;
+  }
+  async function local(start, end) {
+    const g = await roadGraph(),
+      a = start.split(",").map(Number),
+      b = end.split(",").map(Number),
+      result = localRoute(g, a, b);
+    if (!result) return null;
+    // Reject detours forced by gaps in a partial road set.
+    const straight = metres({ lon: a[0], lat: a[1] }, { lon: b[0], lat: b[1] });
+    return result.routes[0].distance <= straight * 2.4 + 3000 ? result : null;
+  }
+  async function online(start, end, sharedSignal) {
+    const tail = `route/v1/driving/${start};${end}?overview=full&geometries=geojson&steps=true`;
+    let last;
+    for (const base of ["https://routing.openstreetmap.de/routed-car/", "https://router.project-osrm.org/"]) {
+      try {
+        sharedSignal.throwIfAborted();
+        const data = await fetchJson(base + tail, sharedSignal, 12000, routeSlots);
+        if (data.code !== "Ok") throw new Error("자동차 경로가 없습니다.");
+        return { ...data, provider: base };
+      } catch (e) {
+        if (sharedSignal.aborted) throw e;
+        last = e;
+      }
+    }
+    throw new Error("자동차 경로 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", { cause: last });
+  }
+  // With the island map pack installed, routes are computed here first, so
+  // hundreds of players never wait on a public routing server. Without it,
+  // the public servers come first and the built-in router is the fallback.
   async function route(start, end, signal) {
-    const tail = `route/v1/driving/${start};${end}?overview=full&geometries=geojson&steps=true`,
-      key = "route:" + start + ";" + end;
     return saved(
-      key,
+      "route:" + start + ";" + end,
       async (sharedSignal) => {
-        let last;
-        for (const base of [
-          "https://routing.openstreetmap.de/routed-car/",
-          "https://router.project-osrm.org/",
-        ]) {
-          try {
-            sharedSignal.throwIfAborted();
-            const data = await fetchJson(base + tail, sharedSignal, 12000, routeSlots);
-            if (data.code !== "Ok") throw new Error("자동차 경로가 없습니다.");
-            return { ...data, provider: base };
-          } catch (e) {
-            if (sharedSignal.aborted) throw e;
-            last = e;
-          }
+        const g = await roadGraph();
+        if (g.tiles >= packTiles) {
+          const mine = await local(start, end);
+          if (mine) return mine;
         }
-        throw new Error("자동차 경로 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", {
-          cause: last,
-        });
+        try {
+          return await online(start, end, sharedSignal);
+        } catch (error) {
+          if (sharedSignal.aborted) throw error;
+          const mine = await local(start, end);
+          if (mine) return mine;
+          throw error;
+        }
       },
       signal,
     );
   }
-  return { mapQuery, route, fetchJson, roadTile };
+  return { mapQuery, route, fetchJson, roadTile, roadGraph };
 }

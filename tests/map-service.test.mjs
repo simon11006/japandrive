@@ -231,3 +231,43 @@ test("at most two map requests go upstream at once, however many players ask", a
   await Promise.all(boxes.map((b) => service.mapQuery(`[out:json];(way(${b})[highway~"^(residential)$"];);out geom;`)));
   assert.ok(peak <= 2, `peak ${peak}`);
 });
+
+test("the built-in router finds a real-road route on bundled Okinawa data, OSRM-shaped", async () => {
+  const { buildGraph, localRoute, metres } = await import("../local-router.mjs");
+  const { readFile } = await import("node:fs/promises");
+  const load = async (f) => {
+    const d = JSON.parse(await readFile(new URL(`../data/${f}`, import.meta.url), "utf8"));
+    return (d.roads || d).elements.filter((e) => e.type === "way" && e.geometry);
+  };
+  const ways = [...(await load("preview-cache.json")), ...(await load("signal-roads.json"))];
+  const graph = buildGraph(ways);
+  const training = JSON.parse(await readFile(new URL("../data/training-routes.json", import.meta.url), "utf8"));
+  const short = training.routes.find((r) => r.data.routes[0].distance < 2000);
+  const result = localRoute(graph, short.start, short.end);
+  assert.equal(result.code, "Ok");
+  const r = result.routes[0];
+  assert.ok(r.geometry.coordinates.length > 2);
+  assert.equal(r.legs[0].steps.at(-1).maneuver.type, "arrive");
+  // Comparable to the stored OSRM route for the same trip.
+  const osrm = short.data.routes[0].distance;
+  assert.ok(r.distance < osrm * 1.6 + 200, `local ${r.distance} vs OSRM ${osrm}`);
+  // Every step of the path follows a real road segment (consecutive points close together).
+  for (let i = 1; i < r.geometry.coordinates.length; i++) {
+    const [a, b] = [r.geometry.coordinates[i - 1], r.geometry.coordinates[i]];
+    assert.ok(metres({ lon: a[0], lat: a[1] }, { lon: b[0], lat: b[1] }) < 1500);
+  }
+});
+
+test("one-way streets are only routed in their direction", async () => {
+  const { buildGraph, localRoute } = await import("../local-router.mjs");
+  const p = (lat, lon) => ({ lat, lon });
+  const ways = [
+    { tags: { highway: "residential", oneway: "yes" }, geometry: [p(26.0, 127.0), p(26.0, 127.01)] },
+    { tags: { highway: "residential" }, geometry: [p(26.0, 127.01), p(26.005, 127.01), p(26.005, 127.0), p(26.0, 127.0)] },
+  ];
+  const g = buildGraph(ways);
+  const east = localRoute(g, [127.0, 26.0], [127.01, 26.0]).routes[0];
+  const west = localRoute(g, [127.01, 26.0], [127.0, 26.0]).routes[0];
+  assert.ok(east.distance < 1100, "eastbound uses the one-way street");
+  assert.ok(west.distance > 2000, "westbound must go around");
+});
