@@ -27,6 +27,7 @@
     {"id":"iias","name":"이아스 오키나와 토요사키","kind":"shop","section":"south","match":"イーアス"},
     {"id":"kyoda","name":"도로휴게소 쿄다","kind":"shop","section":"north","match":"道の駅.*許田"},
     {"id":"naha-airport","name":"나하공항 국제선 터미널","kind":"transport","section":"south","osm":"relation/20229942"},
-    {"id":"you-i","name":"유아이렌터카 나하공항점","kind":"transport","section":"south","lat":26.177168,"lon":127.653905,"source":"https://www.you-i.okinawa/ko/office/nahaairport/","note":"공식 공항점 지도 좌표 · 주차장 입구 미검증"}
+    {"id":"you-i","name":"유아이렌터카 나하공항점","kind":"transport","section":"south","lat":26.177168,"lon":127.653905,"source":"https://www.you-i.okinawa/ko/office/nahaairport/","note":"공식 공항점 지도 좌표 · 주차장 입구 미검증"},
+    {"id":"odal","name":"오달렌터카 나하공항점","kind":"transport","section":"south","lat":26.167595,"lon":127.668626,"source":"https://odal.co.kr/odalrent/branch","note":"공식 안내 주소 207-3 Zayasu, Tomigusuku · 지도 좌표는 장소 등록 위치 · 주차장 입구 미검증"}
   ]
 }

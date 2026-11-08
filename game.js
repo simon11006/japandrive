@@ -179,6 +179,21 @@ function renderVehicles() {
   );
 }
 
+// The page must be served by this game's own server (start-game.bat or
+// `node server.mjs`); another program on the same port can show the page but
+// cannot answer map requests.
+const WRONG_SERVER =
+  "이 주소에서는 다른 프로그램이 응답하고 있어 지도를 불러올 수 없습니다. 열려 있는 게임 서버 창을 모두 닫고 start-game.bat을 다시 실행해 주세요. 새 창에 표시되는 주소로 접속해야 합니다.";
+let serverOk = null;
+fetch("/api/health", { cache: "no-store" })
+  .then((r) => r.json())
+  .then((d) => (serverOk = d.app === "japan-drive"))
+  .catch(() => (serverOk = false))
+  .then(() => {
+    if (serverOk) return;
+    $("#intro-status").textContent = WRONG_SERVER;
+    $("#intro-status").classList.add("error");
+  });
 async function json(url, signal, timeout = 30000) {
   const controller = new AbortController();
   let timedOut = false;
@@ -203,7 +218,11 @@ async function json(url, signal, timeout = 30000) {
     if (error instanceof TypeError)
       throw new Error("지도 연결이 끊겼습니다. 연결을 확인한 뒤 다시 시도해 주세요.");
     if (error instanceof SyntaxError)
-      throw new Error("지도 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      throw new Error(
+        serverOk === false
+          ? WRONG_SERVER
+          : "지도 응답을 읽지 못했습니다. 게임 서버 창(start-game.bat)이 켜져 있는지 확인한 뒤 다시 시도해 주세요.",
+      );
     throw error;
   } finally {
     clearTimeout(timer);
@@ -404,8 +423,10 @@ async function loadRegion(next) {
       const cinema = cached.route.routes[0].geometry.coordinates;
       pos = proj.toLocal(cinema[Math.min(9, cinema.length - 2)]);
       heading = headingBetween(pos, proj.toLocal(cinema[Math.min(10, cinema.length - 1)]));
+      // Park the title car on the left shoulder so passing traffic flows by.
+      pos = { x: pos.x - Math.cos(heading) * 3.4, y: pos.y - Math.sin(heading) * 3.4 };
       traffic = new TrafficSimulation(store.roads, signals, position, difficulty.cars);
-      $("#intro-status").textContent = "";
+      $("#intro-status").textContent = serverOk === false ? WRONG_SERVER : "";
       drawIntroMap();
     }
   } catch (error) {
@@ -1956,7 +1977,8 @@ function frame(t) {
   } else if (driver && features.length) {
     sound.update(dt, { running: false });
     simulationTime += dt;
-    traffic?.tick(dt, simulationTime, { ...pos, heading, speed: 0 });
+    // On the title screen the parked car is not an obstacle for traffic.
+    traffic?.tick(dt, simulationTime, { x: 1e9, y: 1e9, heading: 0, speed: 0 });
     driver.render({
       intro: true,
       position: pos,

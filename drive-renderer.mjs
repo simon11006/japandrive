@@ -10,6 +10,7 @@ import {
 } from "./simulation.mjs";
 import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
+import { makeCarModel } from "./car-model.mjs";
 import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
 import { steeringLimit } from "./vehicles.mjs";
 import {
@@ -796,15 +797,8 @@ export class DriveRenderer {
       this.mirrors.push({ ...mount, target, camera });
     }
     this.scene.remove(this.externalCar);
-    this.externalCar = makeTrafficCar(
-      car.id === "alphard" ? "van" : "sedan",
-      car.id === "alphard" ? "#ece9de" : "#c9d2d3",
-    );
-    this.externalCar.scale.set(
-      car.width / (car.id === "alphard" ? 1.85 : 1.72),
-      1,
-      car.length / (car.id === "alphard" ? 4.9 : 4.3),
-    );
+    // Your own car, seen on the title screen and in the door mirrors.
+    this.externalCar = makeCarModel(car.id);
     this.scene.add(this.externalCar);
   }
   setRoadRules(records, roads, focus = this.base) {
@@ -1281,6 +1275,7 @@ export class DriveRenderer {
       this.externalCar.position.copy(this.rig.position);
       this.externalCar.rotation.copy(this.rig.rotation);
       this.rig.updateMatrixWorld(true);
+      for (const part of this.externalCar.userData.mirrors || []) part.visible = false;
       for (const m of this.mirrors) {
         this.externalCar.visible = m.side !== 0;
         const source = this.rig.localToWorld(m.mount.clone()),
@@ -1294,6 +1289,7 @@ export class DriveRenderer {
         this.renderer.render(this.scene, m.camera);
       }
       this.externalCar.visible = false;
+      for (const part of this.externalCar.userData.mirrors || []) part.visible = true;
       this.interior.visible = true;
     }
     if (state.rear) {

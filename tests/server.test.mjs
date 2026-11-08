@@ -64,3 +64,19 @@ test("cancelling a map preparation request releases the queue for the next reque
   );
   assert.equal(reply.status, 200);
 });
+
+test("the server identifies itself and moves to the next port when 8000 is taken", async () => {
+  const http = await import("node:http");
+  const { createRequestHandler, listen } = await import("../server.mjs");
+  const blocker = http.createServer((_q, r) => r.end("<html>other app</html>"));
+  const first = await listen(blocker, 18600, 18610);
+  const game = http.createServer(createRequestHandler());
+  const port = await listen(game, first, 18610);
+  assert.equal(port, first + 1);
+  const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+  assert.equal(health.app, "japan-drive");
+  game.closeAllConnections();
+  blocker.closeAllConnections();
+  await new Promise((r) => game.close(r));
+  await new Promise((r) => blocker.close(r));
+});
