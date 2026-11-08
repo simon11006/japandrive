@@ -3,11 +3,35 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMapService } from "./map-service.mjs";
+import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
+import { networkInterfaces } from "node:os";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const cache = new Map();
 const maps = createMapService({ cacheDir: resolve(root, "data/service-cache") });
 let queue = Promise.resolve();
+// Static files: read, hashed and gzip-compressed once per change, so dozens
+// of players loading the game at the same time cost little CPU and the
+// browser can reuse what it already has (ETag / 304).
+const files = new Map();
+async function staticFile(path) {
+  const info = await stat(path);
+  if (!info.isFile()) return null;
+  const known = files.get(path);
+  if (known && known.mtime === info.mtimeMs && known.size === info.size) return known;
+  const bytes = await readFile(path),
+    compressible = /\.(html|css|js|mjs|json|geojson|svg)$/.test(path) && bytes.length > 1024,
+    entry = {
+      mtime: info.mtimeMs,
+      size: info.size,
+      bytes,
+      gzip: compressible ? gzipSync(bytes, { level: 6 }) : null,
+      etag: `"${createHash("sha1").update(bytes).digest("base64url")}"`,
+    };
+  files.set(path, entry);
+  return entry;
+}
 // Bundled snapshots are read from disk once, not on every request.
 const snapshots = new Map();
 const snapshot = (name) => {
@@ -165,17 +189,26 @@ export const createRequestHandler =
         root,
         "." + decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname),
       );
-      if (!path.startsWith(root.endsWith(sep) ? root : root + sep) || !(await stat(path)).isFile()) {
+      const file = path.startsWith(root.endsWith(sep) ? root : root + sep) ? await staticFile(path) : null;
+      if (!file) {
         res.writeHead(404);
         res.end("Not found");
         return;
       }
-      const bytes = await readFile(path);
-      res.writeHead(200, {
+      const headers = {
         "Content-Type": `${types[extname(path)] || "application/octet-stream"}; charset=utf-8`,
         "Cache-Control": "no-cache",
-      });
-      res.end(bytes);
+        ETag: file.etag,
+        Vary: "Accept-Encoding",
+      };
+      if (req.headers?.["if-none-match"] === file.etag) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+      const gzip = file.gzip && /\bgzip\b/.test(req.headers?.["accept-encoding"] || "");
+      res.writeHead(200, gzip ? { ...headers, "Content-Encoding": "gzip" } : headers);
+      res.end(gzip ? file.gzip : file.bytes);
     } catch (error) {
       if (res.destroyed) return;
       if (!res.headersSent)
@@ -187,7 +220,7 @@ export const createRequestHandler =
   };
 // Start on port 8000, or the next free port if another program already uses
 // it. With --open the browser is opened at the address actually in use.
-export function listen(server, port = 8000, last = 8010) {
+export function listen(server, port = 8000, last = 8010, host = "127.0.0.1") {
   return new Promise((done, fail) => {
     const attempt = (p) => {
       const onError = (error) => {
@@ -203,15 +236,30 @@ export function listen(server, port = 8000, last = 8010) {
       };
       server.once("error", onError);
       server.once("listening", onListening);
-      server.listen(p, "127.0.0.1");
+      server.listen(p, host);
     };
     attempt(port);
   });
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const port = await listen(http.createServer(createRequestHandler()), Number(process.env.PORT) || 8000);
+  // HOST=0.0.0.0 shares the game with other PCs on the same network
+  // (start-classroom-server.bat). The default only serves this PC.
+  const host = process.env.HOST || "127.0.0.1",
+    server = http.createServer(createRequestHandler());
+  server.keepAliveTimeout = 5000;
+  server.headersTimeout = 10000;
+  const port = await listen(server, Number(process.env.PORT) || 8000, 8010, host);
   const address = `http://127.0.0.1:${port}`;
   console.log(`JAPAN DRIVE: ${address}`);
+  if (host === "0.0.0.0") {
+    const lan = Object.values(networkInterfaces())
+      .flat()
+      .filter((n) => n && n.family === "IPv4" && !n.internal)
+      .map((n) => `http://${n.address}:${port}`);
+    console.log("같은 네트워크의 다른 PC에서는 아래 주소로 접속하세요:");
+    for (const a of lan) console.log("  " + a);
+    console.log("Windows 방화벽 허용 창이 뜨면 '개인 네트워크'를 허용하세요.");
+  }
   console.log("이 창을 닫으면 게임 서버가 꺼집니다.");
   if (process.argv.includes("--open")) {
     const { spawn } = await import("node:child_process");
