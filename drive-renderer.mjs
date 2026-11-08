@@ -1,3 +1,4 @@
+import { t } from "./i18n.mjs";
 import * as THREE from "./vendor/three.module.js";
 import {
   roadWidth,
@@ -173,7 +174,7 @@ function labelTexture(text, color = "#e9f1e5", bg = "#234758") {
     c.fillStyle = color;
     c.textAlign = "center";
     c.font = "bold 48px Malgun Gothic";
-    c.fillText(text, w / 2, 83);
+    c.fillText(t(text), w / 2, 83);
   }).texture;
 }
 function disposeGroup(group) {
@@ -394,7 +395,7 @@ export class DriveRenderer {
       c.textAlign = "center";
       c.font = "38px Malgun Gothic";
       c.fillStyle = "#fff";
-      c.fillText("주변을 직접 확인하세요", w / 2, 65);
+      c.fillText(t("주변을 직접 확인하세요"), w / 2, 65);
     });
     warning.texture.repeat.x = -1;
     warning.texture.offset.x = 1;
@@ -930,7 +931,7 @@ export class DriveRenderer {
         const label = new THREE.Mesh(
           new THREE.PlaneGeometry(1, 1),
           new THREE.MeshBasicMaterial({
-            map: labelTexture(side < 0 ? "왼쪽 미러" : "오른쪽 미러", "#c3d5c9", "#0e1b20"),
+            map: labelTexture(t(side < 0 ? "왼쪽 미러" : "오른쪽 미러"), "#c3d5c9", "#0e1b20"),
           }),
         );
         label.position.z = 0.02;
@@ -1012,7 +1013,7 @@ export class DriveRenderer {
       m.fillText(parkingBrake ? "P" : gear > 0 ? "D" : "R", mw * 0.085, mh * 0.7);
       m.fillStyle = "#7da798";
       m.font = "21px Malgun Gothic";
-      m.fillText("주행 준비", mw * 0.43, mh * 0.76);
+      m.fillText(t("주행 준비"), mw * 0.43, mh * 0.76);
       m.fillText("CHG      ECO      PWR", mw * 0.75, mh * 0.32);
       m.fillStyle = "#3c7167";
       m.fillRect(mw * 0.56, mh * 0.48, mw * 0.35, mh * 0.13);
@@ -1020,7 +1021,7 @@ export class DriveRenderer {
       m.fillRect(mw * 0.56, mh * 0.48, mw * 0.14, mh * 0.13);
       m.fillStyle = "#b8cfc7";
       m.font = "19px Malgun Gothic";
-      m.fillText("하이브리드 시스템", mw * 0.75, mh * 0.87);
+      m.fillText(t("하이브리드 시스템"), mw * 0.75, mh * 0.87);
       arrows();
       this.meter.texture.needsUpdate = true;
       return;
@@ -1070,10 +1071,10 @@ export class DriveRenderer {
       mh * (tall ? 0.25 : 0.58),
     );
     m.font = "15px Malgun Gothic";
-    m.fillText("주행 준비", mw * 0.18, mh * 0.87);
+    m.fillText(t("주행 준비"), mw * 0.18, mh * 0.87);
     m.fillStyle = "#84a6b9";
     m.font = "15px Malgun Gothic";
-    m.fillText("경제 운전", mw * 0.8, mh * 0.88);
+    m.fillText(t("경제 운전"), mw * 0.8, mh * 0.88);
     m.fillStyle = "#5caea4";
     m.fillRect(mw * 0.66, mh * 0.14, mw * 0.22, 3);
     arrows();

@@ -1,3 +1,4 @@
+import { startTranslation, t, LANG, setLanguage } from "./i18n.mjs";
 import {
   REGIONS,
   projection,
@@ -41,6 +42,11 @@ import {
 } from "./simulation.mjs";
 
 const $ = (s) => document.querySelector(s);
+startTranslation();
+document.querySelectorAll("[data-set-lang]").forEach((b) => {
+  b.classList.toggle("on", b.dataset.setLang === LANG);
+  b.addEventListener("click", () => b.dataset.setLang !== LANG && setLanguage(b.dataset.setLang));
+});
 const canvas = $("#world"),
   ctx = canvas.getContext("2d"),
   miniCanvas = $("#map"),
@@ -612,7 +618,7 @@ function drawPlaceMap(canvas, place) {
   c.fillStyle = "#a2c8bf";
   c.font = "16px Malgun Gothic";
   c.fillText("N ↑", 22, 28);
-  c.fillText(region.name, 22, h - 20);
+  c.fillText(t(region.name), 22, h - 20);
 }
 function choosePlace(p) {
   if (!p || p.resolved === false) return;
@@ -970,12 +976,12 @@ function drawOverview() {
     oc.arc(q.x, q.y, 5, 0, Math.PI * 2);
     oc.fill();
     oc.font = "12px Malgun Gothic";
-    oc.fillText(label, q.x + 9, q.y + 4);
+    oc.fillText(t(label), q.x + 9, q.y + 4);
   }
   oc.font = "10px Malgun Gothic";
   oc.fillStyle = "#8eafb6";
   oc.fillText("N ↑", 20, 25);
-  oc.fillText(region.island ? "실제 본섬 해안선 · OSM" : "실제 지도 등록 위치", 20, h - 15);
+  oc.fillText(t(region.island ? "실제 본섬 해안선 · OSM" : "실제 지도 등록 위치"), 20, h - 15);
 }
 
 function drawIntroMap() {
@@ -1054,7 +1060,7 @@ function drawIntroMap() {
     c.arc(q.x, q.y, 3, 0, Math.PI * 2);
     c.fill();
     c.font = "11px Malgun Gothic";
-    c.fillText(name, q.x + 12, q.y + 4);
+    c.fillText(t(name), q.x + 12, q.y + 4);
   }
   c.font = "10px Segoe UI";
   c.fillStyle = "#7eaa9b";

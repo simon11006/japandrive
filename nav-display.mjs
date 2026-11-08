@@ -1,3 +1,4 @@
+import { t } from "./i18n.mjs";
 // In-car navigation screen in the familiar style of a phone map app: light
 // map, blue route, green turn banner on top, arrival bar at the bottom.
 // The map data is OpenStreetMap; only the look follows phone navigation.
@@ -196,6 +197,7 @@ export function drawTurnIcon(c, x, y, s, maneuver = {}) {
 const metres = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)} km` : `${Math.max(0, Math.round(n / 10) * 10)} m`);
 
 function fit(c, text, maxWidth, size, weight = "bold") {
+  text = t(text);
   let s = size;
   do c.font = `${weight} ${s}px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif`;
   while (c.measureText(text).width > maxWidth && --s > 12);
@@ -213,15 +215,15 @@ export function drawNavOverlay(c, w, h, info = {}) {
   c.textAlign = "left";
   if (info.parking) {
     fit(c, "목적지 주차장", w - banner - 30, Math.round(banner * 0.36));
-    c.fillText("목적지 주차장", banner + 18, banner * 0.47);
+    c.fillText(t("목적지 주차장"), banner + 18, banner * 0.47);
     fit(c, info.instruction || "", w - banner - 30, Math.round(banner * 0.2), "normal");
-    c.fillText(info.instruction || "", banner + 18, banner * 0.8);
+    c.fillText(t(info.instruction || ""), banner + 18, banner * 0.8);
   } else {
     fit(c, metres(info.toTurn ?? 0), w * 0.5, Math.round(banner * 0.42));
     c.fillText(metres(info.toTurn ?? 0), banner + 18, banner * 0.5);
     const line = [info.action, info.street].filter(Boolean).join(" · ");
     fit(c, line, w - banner - 30, Math.round(banner * 0.21), "normal");
-    c.fillText(line, banner + 18, banner * 0.84);
+    c.fillText(t(line), banner + 18, banner * 0.84);
   }
   // Arrival bar.
   const bar = Math.round(h * 0.17),
@@ -232,19 +234,20 @@ export function drawNavOverlay(c, w, h, info = {}) {
   c.fillRect(0, top, w, 2);
   c.textAlign = "left";
   c.fillStyle = "#188038";
-  fit(c, info.minutes != null ? `${info.minutes}분` : "", w * 0.3, Math.round(bar * 0.48));
-  c.fillText(info.minutes != null ? `${info.minutes}분` : "", 20, top + bar * 0.62);
-  const minutesWidth = c.measureText(info.minutes != null ? `${info.minutes}분` : "").width;
+  const minutesText = t(info.minutes != null ? `${info.minutes}분` : "");
+  fit(c, minutesText, w * 0.3, Math.round(bar * 0.48));
+  c.fillText(minutesText, 20, top + bar * 0.62);
+  const minutesWidth = c.measureText(minutesText).width;
   c.fillStyle = "#3c4043";
   const detail = [info.remainingMeters != null ? metres(info.remainingMeters) : null, info.eta ? `${info.eta} 도착` : null]
     .filter(Boolean)
     .join(" · ");
-  fit(c, detail, w * 0.36, Math.round(bar * 0.3), "normal");
-  c.fillText(detail, 34 + minutesWidth, top + bar * 0.6);
+  fit(c, t(detail), w * 0.36, Math.round(bar * 0.3), "normal");
+  c.fillText(t(detail), 34 + minutesWidth, top + bar * 0.6);
   c.textAlign = "right";
   c.fillStyle = "#5f6368";
   fit(c, info.destination || "", w * 0.32, Math.round(bar * 0.26), "normal");
-  c.fillText(info.destination || "", w - 18, top + bar * 0.6);
+  c.fillText(t(info.destination || ""), w - 18, top + bar * 0.6);
   // Speed limit sign, Japanese style (red ring), bottom-left above the bar.
   if (info.limit) {
     const r = Math.round(h * 0.075),

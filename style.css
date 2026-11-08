@@ -3568,3 +3568,9 @@ header kbd { font-size: 10px; padding: 0 4px; border: 1px solid #ffffff55; borde
 #map-picker .view-actions button { white-space: nowrap; }
 
 .sign-plate h1 { font-family: "Arial Black", "Malgun Gothic", sans-serif; font-style: italic; letter-spacing: 1px; }
+
+.lang-switch{display:inline-flex;border:1px solid #ffffff40;border-radius:999px;overflow:hidden;margin-right:8px}
+.lang-switch button{border:0;border-radius:0;background:transparent;padding:4px 10px;font-size:12px;opacity:.65;min-height:0}
+.lang-switch button.on{background:#ffffff26;opacity:1;font-weight:700}
+.title-lang{position:absolute;top:84px;right:58px;z-index:6;background:#0b1a20cc;color:#fff}
+.title-lang button{color:#fff;padding:7px 14px;font-size:13px}
