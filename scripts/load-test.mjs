@@ -80,5 +80,5 @@ const failed = results.filter((r) => r.status !== 200),
 console.log(`요청 ${results.length}건 · 실패 ${failed.length}건 · 전송 ${mb.toFixed(1)} MB · 전체 ${(total / 1000).toFixed(1)}초`);
 console.log(`응답 시간 중앙값 ${pct(0.5)} ms · 95% ${pct(0.95)} ms · 최대 ${pct(1)} ms`);
 if (failed.length) console.log("실패 예:", failed.slice(0, 5));
-if (!html.includes("일본 드라이브")) console.log("index.html을 확인하세요.");
+if (!html.includes("KEEP LEFT")) console.log("index.html을 확인하세요.");
 process.exitCode = failed.length ? 1 : 0;

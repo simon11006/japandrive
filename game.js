@@ -1103,17 +1103,20 @@ $("#start").onclick = async () => {
       const candidates = sceneFeatures(data, proj).filter((f) => f.tags.access !== "private");
       const site = proj.toLocal([selected.lon, selected.lat]);
       candidates.sort((a, b) => distance(a.center, site) - distance(b.center, site));
-      if (!candidates.length)
-        throw new Error("이 장소의 차량 진입 가능한 주차장을 확인 중입니다. 다른 목적지를 선택해 주세요.");
-      const area = candidates[0];
-      parkingGoal = {
-        type: "area",
-        points: area.points,
-        center: area.center,
-        heading: 0,
-        name: area.tags.name || selected.name + " 주차장",
-      };
-      features = [...features, ...candidates];
+      if (candidates.length) {
+        const area = candidates[0];
+        parkingGoal = {
+          type: "area",
+          points: area.points,
+          center: area.center,
+          heading: 0,
+          name: area.tags.name || selected.name + " 주차장",
+        };
+        features = [...features, ...candidates];
+      } else
+        // No mapped parking: finish with a safe stop at the roadside in
+        // front of the destination (placed on the route's last road point).
+        parkingGoal = { type: "area", roadside: true, center: site, points: [], heading: 0, name: `${selected.name} 앞 도로변` };
     }
     const target = proj.toGeo(parkingGoal.center);
     preparationStage(1);
@@ -1126,6 +1129,22 @@ $("#start").onclick = async () => {
     if (current !== session || attempt !== driveAttempt) return;
     routeInfo = validateRoute(data);
     route = routeInfo.geometry.coordinates.map(proj.toLocal);
+    if (parkingGoal.roadside) {
+      // A 9 m × 16 m stopping zone on the left side of the last road segment.
+      const end = route.at(-1),
+        before = route.length > 1 ? route.at(-2) : end,
+        h = headingBetween(before, end),
+        f = forward(h),
+        r = { x: Math.cos(h), y: Math.sin(h) },
+        c = { x: end.x - r.x * 1.5, y: end.y - r.y * 1.5 };
+      parkingGoal.center = c;
+      parkingGoal.points = [
+        [-4.5, -8],
+        [4.5, -8],
+        [4.5, 8],
+        [-4.5, 8],
+      ].map(([x, y]) => ({ x: c.x + r.x * x + f.x * y, y: c.y + r.y * x + f.y * y }));
+    }
     steps = routeInfo.legs
       .flatMap((l) => l.steps)
       .map((s) => {
@@ -1667,6 +1686,208 @@ function completeParking() {
   b.onclick = () => $("#menu").click();
   $("#result").append(small, h, p, score, rows, note, b);
 }
+
+// ---------- Place search: like a map app's search box ----------
+let suggestTimer = 0,
+  suggestAbort = null,
+  suggestions = [];
+function placeFromResult(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    lat: r.lat,
+    lon: r.lon,
+    kind: r.kind || "custom",
+    resolved: true,
+    custom: true,
+    source: r.source || null,
+    area: r.lat > 26.55 ? "north" : r.lat > 26.3 ? "central" : "south",
+  };
+}
+function chooseSearchResult(r) {
+  const p = placeFromResult(r);
+  $("#place-query").value = p.name;
+  $("#place-suggest").hidden = true;
+  choosePlace(p);
+  $("#place-selection").textContent = `${placeRole === "departure" ? "출발지" : "목적지"}: ${p.name}`;
+  uiBlip(true);
+}
+function renderSuggestions(list, meta) {
+  suggestions = list;
+  const box = $("#place-suggest");
+  box.replaceChildren(
+    ...list.map((r, i) => {
+      const li = document.createElement("li"),
+        name = document.createElement("strong"),
+        detail = document.createElement("span"),
+        badge = document.createElement("em");
+      li.setAttribute("role", "option");
+      li.dataset.index = i;
+      name.textContent = r.name;
+      detail.textContent = [r.kindName, r.alias, r.address].filter(Boolean).join(" · ");
+      badge.textContent = r.recommended ? "추천" : r.online ? "주소 검색" : r.kindName === "좌표" ? "좌표" : "지도 데이터";
+      li.append(badge, name, detail);
+      li.onpointerdown = (e) => {
+        e.preventDefault();
+        chooseSearchResult(r);
+      };
+      return li;
+    }),
+  );
+  if (!list.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "찾지 못했습니다. 다른 이름이나 구글맵 링크·좌표를 붙여 넣거나 '지도에서 선택'을 눌러 주세요.";
+    box.append(li);
+  }
+  box.hidden = false;
+  if (meta)
+    $("#place-data-note").textContent =
+      `장소 데이터 ${meta.count.toLocaleString()}곳` +
+      (meta.updatedAt ? ` · 기준일 ${meta.updatedAt.slice(0, 10)}` : "") +
+      " · © OpenStreetMap";
+}
+$("#place-query").addEventListener("input", () => {
+  clearTimeout(suggestTimer);
+  const q = $("#place-query").value.trim();
+  if (!q) {
+    $("#place-suggest").hidden = true;
+    return;
+  }
+  suggestTimer = setTimeout(async () => {
+    suggestAbort?.abort();
+    suggestAbort = new AbortController();
+    const near = placeRole === "destination" && departure ? { lat: departure.lat, lon: departure.lon } : {};
+    try {
+      // Local results first (instant), then online address search if needed.
+      const quick = await searchPlaces(q, { ...near, online: false }, suggestAbort.signal);
+      if ($("#place-query").value.trim() !== q) return;
+      renderSuggestions(quick.results, quick);
+      if (quick.results.length < 3 && quick.source !== "pin") {
+        const full = await searchPlaces(q, near, suggestAbort.signal);
+        if ($("#place-query").value.trim() === q) renderSuggestions(full.results, full);
+      }
+    } catch (error) {
+      if (error.name !== "AbortError") $("#place-data-note").textContent = error.message;
+    }
+  }, 220);
+});
+$("#place-query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && suggestions[0]) {
+    e.preventDefault();
+    chooseSearchResult(suggestions[0]);
+  } else if (e.key === "Escape") $("#place-suggest").hidden = true;
+});
+$("#place-query").addEventListener("blur", () => setTimeout(() => ($("#place-suggest").hidden = true), 150));
+
+// Map picker: GSI standard map tiles (Geospatial Information Authority of
+// Japan) with pan and zoom; the crosshair marks the chosen point.
+const picker = { lat: 26.2124, lon: 127.6792, zoom: 12, tiles: new Map(), drag: null };
+function tileXY(lat, lon, z) {
+  const n = 2 ** z,
+    x = ((lon + 180) / 360) * n,
+    y = ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n;
+  return { x, y };
+}
+function latLon(x, y, z) {
+  const n = 2 ** z,
+    lon = (x / n) * 360 - 180,
+    lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI;
+  return { lat, lon };
+}
+function drawPicker() {
+  const canvas = $("#map-picker-canvas"),
+    c = canvas.getContext("2d"),
+    w = (canvas.width = canvas.clientWidth),
+    h = (canvas.height = canvas.clientHeight),
+    z = Math.round(picker.zoom),
+    centre = tileXY(picker.lat, picker.lon, z);
+  c.fillStyle = "#aad3df";
+  c.fillRect(0, 0, w, h);
+  // Coastline underneath, so the picker still works offline.
+  if (ring) {
+    c.beginPath();
+    ring.forEach(([lon, lat], i) => {
+      const t = tileXY(lat, lon, z),
+        x = w / 2 + (t.x - centre.x) * 256,
+        y = h / 2 + (t.y - centre.y) * 256;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    });
+    c.fillStyle = "#f2efe9";
+    c.fill();
+  }
+  const x0 = Math.floor(centre.x - w / 512) - 1,
+    x1 = Math.floor(centre.x + w / 512) + 1,
+    y0 = Math.floor(centre.y - h / 512) - 1,
+    y1 = Math.floor(centre.y + h / 512) + 1;
+  for (let tx = x0; tx <= x1; tx++)
+    for (let ty = y0; ty <= y1; ty++) {
+      const key = `${z}/${tx}/${ty}`;
+      let img = picker.tiles.get(key);
+      if (!img) {
+        img = new Image();
+        img.onload = () => !$("#map-picker").hidden && drawPicker();
+        img.src = `https://cyberjapandata.gsi.go.jp/xyz/std/${key}.png`;
+        picker.tiles.set(key, img);
+      }
+      if (img.complete && img.naturalWidth)
+        c.drawImage(img, w / 2 + (tx - centre.x) * 256, h / 2 + (ty - centre.y) * 256, 256, 256);
+    }
+  c.strokeStyle = "#d93025";
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(w / 2 - 14, h / 2);
+  c.lineTo(w / 2 + 14, h / 2);
+  c.moveTo(w / 2, h / 2 - 14);
+  c.lineTo(w / 2, h / 2 + 14);
+  c.stroke();
+  $("#map-picker-coords").textContent = `${picker.lat.toFixed(5)}, ${picker.lon.toFixed(5)}`;
+}
+function openPicker() {
+  const current = placeRole === "departure" ? departure : selected;
+  if (current?.lat) Object.assign(picker, { lat: current.lat, lon: current.lon, zoom: 15 });
+  $("#map-picker").hidden = false;
+  requestAnimationFrame(drawPicker);
+}
+$("#pick-on-map").onclick = openPicker;
+$("#map-picker-close").onclick = () => ($("#map-picker").hidden = true);
+$("#map-picker-zoom-in").onclick = () => ((picker.zoom = Math.min(18, picker.zoom + 1)), drawPicker());
+$("#map-picker-zoom-out").onclick = () => ((picker.zoom = Math.max(9, picker.zoom - 1)), drawPicker());
+$("#map-picker-canvas").addEventListener("wheel", (e) => {
+  e.preventDefault();
+  picker.zoom = Math.max(9, Math.min(18, picker.zoom + (e.deltaY < 0 ? 1 : -1)));
+  drawPicker();
+});
+$("#map-picker-canvas").addEventListener("pointerdown", (e) => {
+  const z = Math.round(picker.zoom),
+    centre = tileXY(picker.lat, picker.lon, z);
+  picker.drag = { x: e.clientX, y: e.clientY, cx: centre.x, cy: centre.y, z };
+  e.target.setPointerCapture(e.pointerId);
+});
+$("#map-picker-canvas").addEventListener("pointermove", (e) => {
+  const d = picker.drag;
+  if (!d) return;
+  // Dragging moves the map: the centre shifts opposite to the pointer.
+  const next = latLon(d.cx - (e.clientX - d.x) / 256, d.cy - (e.clientY - d.y) / 256, d.z);
+  picker.lat = next.lat;
+  picker.lon = next.lon;
+  drawPicker();
+});
+$("#map-picker-canvas").addEventListener("pointerup", () => (picker.drag = null));
+$("#map-picker-choose").onclick = () => {
+  if (ring && !pointInRing([picker.lon, picker.lat], ring)) {
+    $("#map-picker-coords").textContent = "오키나와 본섬 안의 위치를 골라 주세요.";
+    return;
+  }
+  $("#map-picker").hidden = true;
+  chooseSearchResult({
+    id: `pin:${picker.lat.toFixed(6)},${picker.lon.toFixed(6)}`,
+    name: `지도에서 고른 위치 (${picker.lat.toFixed(4)}, ${picker.lon.toFixed(4)})`,
+    lat: picker.lat,
+    lon: picker.lon,
+    kindName: "좌표",
+  });
+};
 
 // ---------- Title screen: attract mode, then a keyboard-driven menu ----------
 const menuItems = () => [...document.querySelectorAll("#title-menu .menu-item")];

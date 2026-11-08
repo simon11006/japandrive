@@ -33,7 +33,7 @@ test("a rejected map request returns an error once and the next page request sti
   const next = new Response();
   await handler({ method: "GET", url: "/" }, next);
   assert.equal(next.status, 200);
-  assert.match(next.body, /일본 드라이브/);
+  assert.match(next.body, /KEEP LEFT/);
 });
 test("cancelling a map preparation request releases the queue for the next request", async () => {
   let started;
