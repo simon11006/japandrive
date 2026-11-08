@@ -249,3 +249,59 @@ export function routeProgress(points, pos, measuredDistance) {
     Number.isFinite(measuredDistance) && measuredDistance > 0 && total > 0 ? measuredDistance / total : 1;
   return { ...best, remaining: best.remaining * scale, travelled: best.travelled * scale };
 }
+
+// Real building footprints (OpenStreetMap) around the car, streamed in the
+// same 2 km tiles as the roads. Missing buildings never stop a drive.
+export function buildingQuery(keys, proj) {
+  return `[out:json][timeout:90];(${keys.map((key) => `way(${tileBounds(key, proj).join(",")})[building];`).join("")});out geom;`;
+}
+export class BuildingStore {
+  constructor(proj, fetcher, radius = 900) {
+    this.proj = proj;
+    this.fetcher = fetcher;
+    this.radius = radius;
+    this.tiles = new Map();
+    this.features = [];
+  }
+  // Resolves true when the set of buildings changed.
+  async ensure(pos, signal) {
+    const wanted = tileKeysNear(pos, this.radius);
+    const missing = wanted.filter((key) => !this.tiles.has(key));
+    if (!missing.length) return false;
+    const data = await this.fetcher(buildingQuery(missing, this.proj), signal);
+    const list = data.elements
+      .filter((e) => e.type === "way" && e.geometry?.length >= 3 && e.tags?.building)
+      .map((e) => {
+        let points = e.geometry.map((p) => this.proj.toLocal([p.lon, p.lat]));
+        const a = points[0],
+          b = points.at(-1);
+        if (Math.hypot(a.x - b.x, a.y - b.y) < 0.01) points = points.slice(0, -1);
+        const center = points.reduce((c, p) => ({ x: c.x + p.x / points.length, y: c.y + p.y / points.length }), {
+          x: 0,
+          y: 0,
+        });
+        const height = Number.parseFloat(e.tags.height);
+        return {
+          id: e.id,
+          points,
+          center,
+          tags: e.tags,
+          height: Number.isFinite(height) ? height : null,
+          streamed: true,
+        };
+      })
+      .filter((f) => f.points.length >= 3);
+    // A building on a tile border comes back for both tiles: it belongs to
+    // the tile that holds its centre.
+    const byTile = new Map(missing.map((key) => [key, []]));
+    for (const f of list) byTile.get(`${Math.floor(f.center.x / TILE_SIZE)}:${Math.floor(f.center.y / TILE_SIZE)}`)?.push(f);
+    for (const [key, items] of byTile) this.tiles.set(key, items);
+    while (this.tiles.size > 16) {
+      const oldest = [...this.tiles.keys()].find((key) => !wanted.includes(key));
+      if (!oldest) break;
+      this.tiles.delete(oldest);
+    }
+    this.features = [...new Map([...this.tiles.values()].flat().map((f) => [f.id, f])).values()];
+    return true;
+  }
+}

@@ -174,3 +174,34 @@ test("street scene uses recorded geometry without inventing building heights or 
   assert.equal(features.find((f) => f.id === 1209839555).height, null); // Canphou has floor count, not measured height
   assert.ok(features.every((f) => f.points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))));
 });
+
+test("streamed buildings load around the car, once per tile, and stay bounded", async () => {
+  const { BuildingStore, projection } = await import("../map-data.mjs");
+  const proj = projection([127.68, 26.214]);
+  const queries = [];
+  const store = new BuildingStore(proj, async (q) => {
+    queries.push(q);
+    const boxes = [...q.matchAll(/way\(([\d.,-]+)\)/g)].map((m) => m[1].split(",").map(Number));
+    return {
+      elements: boxes.map(([s, w], i) => ({
+        type: "way",
+        id: Math.round(s * 1e5) * 1000 + Math.round(w * 1e5) + i,
+        tags: { building: "yes" },
+        geometry: [
+          { lat: s + 0.002, lon: w + 0.002 },
+          { lat: s + 0.002, lon: w + 0.0022 },
+          { lat: s + 0.0022, lon: w + 0.0022 },
+          { lat: s + 0.002, lon: w + 0.002 },
+        ],
+      })),
+    };
+  });
+  assert.equal(await store.ensure({ x: 0, y: 0 }), true);
+  const first = store.features.length;
+  assert.ok(first >= 1);
+  assert.equal(store.features[0].points.length, 3, "closing point dropped");
+  assert.equal(await store.ensure({ x: 10, y: 10 }), false);
+  assert.equal(queries.length, 1);
+  for (let x = 0; x < 40000; x += 2000) await store.ensure({ x, y: 0 });
+  assert.ok(store.tiles.size <= 16);
+});

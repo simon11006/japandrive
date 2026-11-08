@@ -52,6 +52,36 @@ export function limiter(n) {
 }
 export const ROAD_FILTER =
   '[highway~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]';
+// Buildings: footprints only, without roofs/canopies the car can drive under.
+export const BUILDING_FILTER = "[building]";
+export const BUILDING_QUERY = (box) => `[out:json][timeout:90];way(${box})[building];out geom;`;
+const OPEN_BUILDINGS = new Set(["roof", "carport", "canopy", "no", "construction", "ruins"]);
+export function isSolidBuilding(e) {
+  const t = e.tags || {};
+  return (
+    e.type === "way" &&
+    e.geometry?.length >= 3 &&
+    t.building &&
+    !OPEN_BUILDINGS.has(t.building) &&
+    t.location !== "underground" &&
+    !(Number(t.layer) < 0)
+  );
+}
+// Pack/cache form: only what the 3D scene uses, coordinates rounded to ~10 cm.
+export function compactBuildings(data) {
+  return {
+    elements: data.elements.filter(isSolidBuilding).map((e) => {
+      const tags = { building: e.tags.building };
+      for (const k of ["building:levels", "height", "name"]) if (e.tags[k]) tags[k] = e.tags[k];
+      return {
+        type: "way",
+        id: e.id,
+        tags,
+        geometry: e.geometry.map((p) => ({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6) })),
+      };
+    }),
+  };
+}
 export const boxKey = (b) => b.map((v) => Number(v).toFixed(6)).join(",");
 export function queryBounds(query) {
   const around = query.match(/way\(around:([\d.]+),([\d.-]+),([\d.-]+)\)/);
@@ -68,6 +98,7 @@ export function queryBounds(query) {
     .filter((b) => b.length === 4 && b.every(Number.isFinite));
 }
 export function selectMapQuery(data, query) {
+  if (query.includes(BUILDING_FILTER)) return compactBuildings(data);
   const roads = query.includes("[highway~"),
     parking = query.includes("[amenity=parking]"),
     around = query.match(/around:([\d.]+),([\d.-]+),([\d.-]+)/);

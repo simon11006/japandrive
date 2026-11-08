@@ -5,6 +5,7 @@ import {
   normalizePois,
   poiQuery,
   RoadStore,
+  BuildingStore,
   validateRoute,
   routeProgress,
   pointInRing,
@@ -94,7 +95,23 @@ let pos = { x: 0, y: 0 },
 let car = VEHICLES[1],
   steer = 0;
 let features = [],
-  visibleFeatures = [];
+  visibleFeatures = [],
+  nearFeatures = [],
+  buildings = null;
+// Fixed scene features (test areas, destination lots) plus streamed real
+// buildings around the car.
+const sceneList = () => (buildings?.features.length ? [...features, ...buildings.features] : features);
+const featuresNear = (radius) => sceneList().filter((f) => Math.hypot(f.center.x - pos.x, f.center.y - pos.y) < radius);
+// Map footprints are approximate (±0.5 m), so a streamed building only counts
+// as hit when a car corner is clearly inside it.
+const hitsBuilding = (f, p) =>
+  insidePolygon(p, f.points) &&
+  (!f.streamed || f.points.every((q, i) => nearestOnSegment(p, f.points[i ? i - 1 : f.points.length - 1], q).distance > 0.6));
+function refreshNearFeatures() {
+  // The nav map only needs the neighbourhood; collisions only the next metres.
+  visibleFeatures = featuresNear(450);
+  nearFeatures = visibleFeatures.filter((f) => Math.hypot(f.center.x - pos.x, f.center.y - pos.y) < 250);
+}
 let destinationSites = [];
 let driver,
   elevation = () => 0,
@@ -316,6 +333,7 @@ async function loadRegion(next) {
   allPois = [];
   features = [];
   visibleFeatures = [];
+  nearFeatures = [];
   destinationSites = [];
   signalRecords = [];
   signals = [];
@@ -411,6 +429,7 @@ async function loadRegion(next) {
     }
     if (id !== session) return;
     store = new RoadStore(proj, overpass);
+    buildings = region.island ? new BuildingStore(proj, overpass) : null;
     $("#quick-test").hidden = !region.island;
     $("#region-caption").textContent = "일본 첫 운전 연습";
     $("#region-title").textContent = region.name;
@@ -1161,6 +1180,10 @@ $("#start").onclick = async () => {
     await store.ensure(route[0]);
     if (current !== session || attempt !== driveAttempt) return;
     if (!store.roads.length) throw new Error("출발 위치의 도로 데이터를 불러오지 못했습니다.");
+    // Buildings are scenery: wait briefly, never fail the drive for them.
+    if (buildings)
+      await Promise.race([buildings.ensure(route[0], abortSignal).catch(() => false), new Promise((r) => setTimeout(r, 9000))]);
+    if (current !== session || attempt !== driveAttempt) return;
     trainingMode = "drive";
     resetPosition();
     roadError = "";
@@ -1189,7 +1212,7 @@ $("#start").onclick = async () => {
     driver?.setup({
       base: pos,
       roads: store.roads,
-      features,
+      features: sceneList(),
       coast,
       elevation,
       signals,
@@ -1237,7 +1260,7 @@ function resetPosition() {
   speed = 0;
   gear = 1;
   steer = 0;
-  visibleFeatures = features.filter((f) => Math.hypot(f.center.x - pos.x, f.center.y - pos.y) < 850);
+  refreshNearFeatures();
   const ahead = route.find((p) => Math.hypot(p.x - pos.x, p.y - pos.y) > 4) || route.at(-1);
   heading = Math.atan2(ahead.x - pos.x, -(ahead.y - pos.y));
   visibleRoads = store.near(pos);
@@ -1379,6 +1402,21 @@ function drawMap(context, width, height, scale) {
   drawCarMarker(context, width / 2, height * 0.66, Math.max(9, Math.min(20, width / 34)));
 }
 
+let buildingBusy = false;
+async function updateBuildings(current) {
+  if (!buildings || buildingBusy || !active) return;
+  buildingBusy = true;
+  try {
+    if ((await buildings.ensure(pos)) && current === session && active) {
+      driver?.setBuildings(sceneList());
+      refreshNearFeatures();
+    }
+  } catch {
+    // Scenery only: try again on the next road check.
+  } finally {
+    buildingBusy = false;
+  }
+}
 async function updateRoads() {
   if (roadBusy || !active) return;
   roadBusy = true;
@@ -1403,6 +1441,7 @@ async function updateRoads() {
   } finally {
     roadBusy = false;
   }
+  updateBuildings(current);
 }
 
 function hud() {
@@ -2206,7 +2245,7 @@ function frameBody(t) {
       const body = vehicleCorners({ ...pos, heading }, car);
       if (
         speed > 0.1 &&
-        visibleFeatures.some((f) => f.tags.building && body.some((p) => insidePolygon(p, f.points)))
+        nearFeatures.some((f) => f.tags.building && body.some((p) => hitsBuilding(f, p)))
       ) {
         pos = { x: previous.x, y: previous.y };
         sound.thud();
@@ -2271,7 +2310,7 @@ function frameBody(t) {
     if (t - lastRoadCheck > 1500) {
       lastRoadCheck = t;
       visibleRoads = store.near(pos);
-      visibleFeatures = features.filter((f) => Math.hypot(f.center.x - pos.x, f.center.y - pos.y) < 850);
+      refreshNearFeatures();
       updateRoads();
     }
     driver?.render({

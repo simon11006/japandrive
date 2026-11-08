@@ -271,3 +271,34 @@ test("one-way streets are only routed in their direction", async () => {
   assert.ok(east.distance < 1100, "eastbound uses the one-way street");
   assert.ok(west.distance > 2000, "westbound must go around");
 });
+
+test("building tiles keep solid footprints only, compact, and are cached per tile", async (t) => {
+  const dir = await folder(t);
+  const calls = [];
+  const square = (lat, lon) => [0, 1, 2, 3, 0].map((i) => ({ lat: lat + (i === 1 || i === 2 ? 0.0001 : 0) + 1e-9, lon: lon + (i >= 2 && i < 4 ? 0.0001 : 0) }));
+  const service = createMapService({
+    cacheDir: dir,
+    fetcher: async (url) => {
+      calls.push(String(url));
+      const box = decodeURIComponent(String(url)).match(/way\(([\d.,-]+)\)/)[1].split(",").map(Number);
+      return ok({
+        elements: [
+          { type: "way", id: 1 + box[0], tags: { building: "house", "building:levels": "2", source: "survey", addr: "x" }, geometry: square(box[0], box[1]) },
+          { type: "way", id: 2 + box[0], tags: { building: "roof" }, geometry: square(box[0], box[1] + 0.001) },
+          { type: "way", id: 3 + box[0], tags: { building: "yes", layer: "-1" }, geometry: square(box[0], box[1] + 0.002) },
+        ],
+      });
+    },
+  });
+  const A = "26.200000,127.590000,26.210000,127.610000",
+    B = "26.210000,127.590000,26.220000,127.610000";
+  const q = (...boxes) => `[out:json][timeout:90];(${boxes.map((b) => `way(${b})[building];`).join("")});out geom;`;
+  const data = await service.mapQuery(q(A, B));
+  assert.equal(data.elements.length, 2);
+  assert.deepEqual(Object.keys(data.elements[0].tags).sort(), ["building", "building:levels"]);
+  assert.equal(data.elements[0].geometry[1].lat, 26.2001);
+  assert.equal(calls.length, 2);
+  await service.mapQuery(q(B));
+  assert.equal(calls.length, 2);
+  assert.ok((await service.packFiles("buildings:")).length === 2);
+});

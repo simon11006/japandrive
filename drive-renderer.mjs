@@ -652,33 +652,70 @@ export class DriveRenderer {
   }
   setBuildings(features) {
     disposeGroup(this.buildingGroup);
-    const roof = mat("#ffffff", 0.95, { map: this.textures.concrete });
+    const roof = (this.roofMaterial ??= mat("#ffffff", 0.95, { map: this.textures.concrete }));
     const pick = (id) => {
       let n = 2166136261;
       for (const ch of String(id)) n = Math.imul(n ^ ch.charCodeAt(0), 16777619);
-      return this.facades[(n >>> 0) % this.facades.length];
+      return (n >>> 0) % this.facades.length;
     };
+    // Thousands of real footprints: merge them into one mesh per facade
+    // texture (roofs first, walls second) so a city block is a few draw calls.
+    const buckets = this.facades.map(() => ({ roofs: [], walls: [] }));
+    const seen = new Set();
     for (const f of features) {
-      if (!f.tags.building) continue;
+      if (!f.tags.building || seen.has(f.id)) continue;
+      seen.add(f.id);
       const levels = Number(f.tags["building:levels"]);
       // Massing heights inferred from mapped floor count are approximations;
       // source quality is documented in the data panel, not presented as CAD.
-      const height = f.height ?? (levels ? levels * 3.1 : 3.1);
-      const shape = new THREE.Shape(
-        f.points.map((p) => new THREE.Vector2(p.x - this.base.x, -(p.y - this.base.y))),
-      );
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+      const height = Math.min(f.height ?? (levels ? levels * 3.1 : 3.1), 200);
+      let geometry;
+      try {
+        const shape = new THREE.Shape(
+          f.points.map((p) => new THREE.Vector2(p.x - this.base.x, -(p.y - this.base.y))),
+        );
+        geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+      } catch {
+        continue;
+      }
       geometry.rotateX(-Math.PI / 2);
-      // Extruded side walls get metre-scale UVs, so one facade tile is one
-      // storey by one window bay.
-      const mesh = new THREE.Mesh(geometry, [roof, pick(f.id ?? f.center.x)]);
-      mesh.position.y = this.elevation(f.center);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.buildingGroup.add(mesh);
+      geometry.translate(0, this.elevation(f.center), 0);
+      const g = geometry.index ? geometry.toNonIndexed() : geometry;
+      const bucket = buckets[pick(f.id ?? f.center.x)];
+      for (const group of g.groups.length ? g.groups : [{ start: 0, count: g.attributes.position.count, materialIndex: 1 }])
+        (group.materialIndex === 0 ? bucket.roofs : bucket.walls).push({ g, start: group.start, count: group.count });
       if (f.tags.name?.includes("カンプー"))
         this.signBoard("SUNSET RESORT CANPHOU", f.center, height * 0.76, 0.0, this.buildingGroup);
     }
+    buckets.forEach((bucket, i) => {
+      const parts = [...bucket.roofs, ...bucket.walls];
+      if (!parts.length) return;
+      const total = parts.reduce((n, p) => n + p.count, 0);
+      const position = new Float32Array(total * 3),
+        normal = new Float32Array(total * 3),
+        uv = new Float32Array(total * 2);
+      let at = 0;
+      for (const p of parts) {
+        const a = p.g.attributes;
+        position.set(a.position.array.subarray(p.start * 3, (p.start + p.count) * 3), at * 3);
+        normal.set(a.normal.array.subarray(p.start * 3, (p.start + p.count) * 3), at * 3);
+        uv.set(a.uv.array.subarray(p.start * 2, (p.start + p.count) * 2), at * 2);
+        at += p.count;
+      }
+      const roofCount = bucket.roofs.reduce((n, p) => n + p.count, 0);
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute("position", new THREE.BufferAttribute(position, 3));
+      merged.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
+      merged.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+      merged.addGroup(0, roofCount, 0);
+      merged.addGroup(roofCount, total - roofCount, 1);
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, [roof, this.facades[i]]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.buildingGroup.add(mesh);
+    });
+    for (const bucket of buckets) for (const p of [...bucket.roofs, ...bucket.walls]) p.g.dispose();
     // Surface polygons are geographic map geometry, not invented parking lots.
     for (const f of features.filter((f) => f.tags.amenity === "parking")) {
       const positions = this.surface

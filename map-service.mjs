@@ -13,6 +13,7 @@ import {
   selectMapQuery,
 } from "./map-core.mjs";
 export { HIGHWAYS, coreGeometry, limiter, ROAD_FILTER, boxKey, queryBounds, selectMapQuery };
+import { BUILDING_FILTER, BUILDING_QUERY, compactBuildings } from "./map-core.mjs";
 export function createMapService({
   fetcher = fetch,
   cacheDir = resolve("data/service-cache"),
@@ -196,6 +197,28 @@ export function createMapService({
       signal,
     );
   }
+  // Buildings, one road-sized tile at a time (same tiles as the offline pack).
+  async function buildingTile(b, signal) {
+    return saved(
+      "buildings:" + boxKey(b),
+      async (shared) => {
+        try {
+          return compactBuildings(await overpassRaw(BUILDING_QUERY(boxKey(b)), shared));
+        } catch (error) {
+          if (shared.aborted) throw error;
+        }
+        const results = [];
+        const step = 0.009;
+        for (let lat = b[0]; lat < b[2] - 1e-9; lat += step)
+          for (let lon = b[1]; lon < b[3] - 1e-9; lon += step)
+            results.push(
+              ...(await osmBox([lat, lon, Math.min(b[2], lat + step), Math.min(b[3], lon + step)], shared)),
+            );
+        return compactBuildings(merge(results));
+      },
+      signal,
+    );
+  }
   const merge = (results) => ({
     elements: [...new Map(results.flatMap((d) => d.elements).map((e) => [e.type + "/" + e.id, e])).values()],
   });
@@ -206,6 +229,8 @@ export function createMapService({
       if ((b[2] - b[0]) * (b[3] - b[1]) > 0.0025) throw new Error("지도 조회 범위가 너무 넓습니다.");
     if (query.includes("[highway~"))
       return selectMapQuery(merge(await Promise.all(bounds.map((b) => roadTile(b, signal)))), query);
+    if (query.includes(BUILDING_FILTER))
+      return merge(await Promise.all(bounds.map((b) => buildingTile(b, signal))));
     if (query.includes("[amenity=parking]")) {
       const fromPack = await packParking(query);
       if (fromPack) return fromPack;
@@ -360,7 +385,7 @@ nwr["aeroway"="aerodrome"]["name"](${b});
   // Re-download the oldest pack file once it is older than `days`.
   // Called now and then by one server worker while it is idle.
   async function refreshStale(days = 30) {
-    const files = [...(await packFiles("roads:")), ...(await packFiles("places:")), ...(await packFiles("parking:"))];
+    const files = [...(await packFiles("roads:")), ...(await packFiles("places:")), ...(await packFiles("parking:")), ...(await packFiles("buildings:"))];
     const old = files
       .filter((f) => Date.now() - Date.parse(f.fetchedAt || 0) > days * 86400000)
       .sort((a, b) => Date.parse(a.fetchedAt || 0) - Date.parse(b.fetchedAt || 0))[0];
@@ -372,7 +397,9 @@ nwr["aeroway"="aerodrome"]["name"](${b});
         ? await overpassRaw(`[out:json][timeout:45];way(${box})${ROAD_FILTER};out geom;`, controller.signal)
         : kind === "places"
           ? await overpassRaw(PLACE_QUERY(box), controller.signal)
-          : await overpassRaw(PARKING_QUERY(box), controller.signal);
+          : kind === "buildings"
+            ? compactBuildings(await overpassRaw(BUILDING_QUERY(box), controller.signal))
+            : await overpassRaw(PARKING_QUERY(box), controller.signal);
     const path = resolve(cacheDir, old.file);
     await writeFile(path + ".tmp", JSON.stringify({ schema: 1, source: old.source, fetchedAt: new Date().toISOString(), data }));
     await rename(path + ".tmp", path);
@@ -423,5 +450,5 @@ nwr["aeroway"="aerodrome"]["name"](${b});
       signal,
     );
   }
-  return { mapQuery, route, fetchJson, roadTile, roadGraph, placeBox, parkingBox, packFiles, refreshStale, geocode };
+  return { mapQuery, route, fetchJson, roadTile, buildingTile, roadGraph, placeBox, parkingBox, packFiles, refreshStale, geocode };
 }

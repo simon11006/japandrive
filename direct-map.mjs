@@ -6,7 +6,7 @@
 //      the player's own connection, so hundreds of players do not share one
 //      address;
 //   3. the built-in router over the roads already loaded, if routing fails.
-import { selectMapQuery, queryBounds, boxKey, ROAD_FILTER, limiter } from "./map-core.mjs";
+import { selectMapQuery, queryBounds, boxKey, ROAD_FILTER, limiter, BUILDING_FILTER, BUILDING_QUERY, compactBuildings } from "./map-core.mjs";
 import { buildGraph, localRoute, metres } from "./local-router.mjs";
 import { buildIndex, entriesFromOsm, search, parseLocation } from "./place-search.mjs";
 
@@ -36,7 +36,7 @@ const snapshot = (name) => once(() => local(`data/${name}`).catch(() => null));
 const preview = snapshot("preview-cache.json"),
   signalRoads = snapshot("signal-roads.json"),
   training = snapshot("training-routes.json"),
-  manifest = once(() => local("data/pack/manifest.json").catch(() => ({ roads: [], places: [], parking: [] })));
+  manifest = once(() => local("data/pack/manifest.json").catch(() => ({ roads: [], places: [], parking: [], buildings: [] })));
 
 async function overpass(query, signal) {
   return slots(async () => {
@@ -72,6 +72,25 @@ async function roadTile(b, signal) {
     );
   return tiles.get(key);
 }
+const buildingTiles = new Map();
+async function buildingTile(b, signal) {
+  const key = boxKey(b);
+  if (!buildingTiles.has(key))
+    buildingTiles.set(
+      key,
+      (async () => {
+        const m = await manifest();
+        if (m.buildings?.includes(key)) return local(`data/pack/buildings/${key}.json`);
+        return compactBuildings(await overpass(BUILDING_QUERY(key), signal));
+      })().catch((e) => {
+        buildingTiles.delete(key);
+        throw e;
+      }),
+    );
+  // Keep memory bounded on long drives.
+  while (buildingTiles.size > 24) buildingTiles.delete(buildingTiles.keys().next().value);
+  return buildingTiles.get(key);
+}
 const merge = (list) => ({
   elements: [...new Map(list.flatMap((d) => d.elements).map((e) => [e.type + "/" + e.id, e])).values()],
 });
@@ -88,6 +107,7 @@ export async function mapQuery(query, signal) {
     if (requested.length && requested.every((b) => available.has(b))) return merge(sources.map((s) => s.roads));
     return selectMapQuery(merge(await Promise.all(queryBounds(query).map((b) => roadTile(b, signal)))), query);
   }
+  if (query.includes(BUILDING_FILTER)) return merge(await Promise.all(queryBounds(query).map((b) => buildingTile(b, signal))));
   if (query.includes("[amenity=parking]")) {
     const around = query.match(/around:([\d.]+),([\d.-]+),([\d.-]+)/),
       m = await manifest();

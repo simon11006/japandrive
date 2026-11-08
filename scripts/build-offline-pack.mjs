@@ -129,6 +129,13 @@ async function main() {
   for (const p of places) {
     await attempt(p.name, () => service.mapQuery(parkingQuery(p.lat, p.lon)));
   }
+  // Buildings come after roads, places and parking: the drive still works
+  // without them, and a cut-off run continues here next time.
+  done = 0;
+  for (const key of tiles) {
+    await attempt(`건물 ${key}`, () => service.buildingTile(tileBounds(key, proj)));
+    if (++done % 20 === 0 || done === tiles.length) console.log(`건물 ${done}/${tiles.length}`);
+  }
   // Monthly refresh: re-download files older than --refresh-days.
   if (refreshDays > 0)
     for (let n = 0; n < 2000 && Date.now() < deadline; n++) {
@@ -150,9 +157,9 @@ async function main() {
 // Plain files for the no-server (web page) mode: data/pack/<kind>/<box>.json
 // plus manifest.json with the box lists and the oldest download date.
 export async function exportPack(service, out = new URL("data/pack/", root)) {
-  const manifest = { updatedAt: null, roads: [], places: [], parking: [] };
+  const manifest = { updatedAt: null, roads: [], places: [], parking: [], buildings: [] };
   const dates = [];
-  for (const kind of ["roads", "places", "parking"]) {
+  for (const kind of ["roads", "places", "parking", "buildings"]) {
     await mkdir(new URL(`${kind}/`, out), { recursive: true });
     for (const f of await service.packFiles(kind + ":")) {
       const key = f.source.slice(kind.length + 1);
@@ -167,6 +174,6 @@ export async function exportPack(service, out = new URL("data/pack/", root)) {
   }
   manifest.updatedAt = dates.sort()[0] || null;
   await writeFile(new URL("manifest.json", out), JSON.stringify(manifest));
-  console.log(`웹 배포용 지도 파일: 도로 ${manifest.roads.length} · 장소 ${manifest.places.length} · 주차장 ${manifest.parking.length}`);
+  console.log(`웹 배포용 지도 파일: 도로 ${manifest.roads.length} · 장소 ${manifest.places.length} · 주차장 ${manifest.parking.length} · 건물 ${manifest.buildings.length}`);
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();
