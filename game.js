@@ -210,7 +210,9 @@ async function json(url, signal, timeout = 30000) {
     signal?.removeEventListener("abort", abort);
   }
 }
-const overpass = (query, signal) => json("/api/overpass?" + new URLSearchParams({ data: query }), signal);
+// Road and parking lookups can need a server fallback, so allow more time.
+const overpass = (query, signal) =>
+  json("/api/overpass?" + new URLSearchParams({ data: query }), signal, 90000);
 
 function renderRegions() {
   $("#regions").replaceChildren(

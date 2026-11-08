@@ -149,3 +149,42 @@ test("a cache write failure does not turn a valid driving route into a connectio
   const service = createMapService({ cacheDir: join(blocked, "cache"), fetcher: async () => ok(route) });
   assert.equal((await service.route("127,26", "127.01,26.01")).code, "Ok");
 });
+
+test("road lookups use Overpass first and fall back to small general-API boxes in dense towns", async (t) => {
+  const dir = await folder(t);
+  const query = '[out:json][timeout:45];(way(26.20,127.67,26.2179,127.69)[highway~"^(primary|residential)$"];);out geom;';
+  const road = { type: "way", id: 9, tags: { highway: "primary" }, geometry: [{ lat: 26.2, lon: 127.67 }, { lat: 26.21, lon: 127.68 }] };
+  // 1) Overpass answers: the general API is never touched.
+  const seen = [];
+  let service = createMapService({
+    cacheDir: dir,
+    fetcher: async (url) => {
+      seen.push(url);
+      return ok({ elements: [road] });
+    },
+  });
+  assert.deepEqual((await service.mapQuery(query)).elements.map((e) => e.id), [9]);
+  assert.ok(seen.every((u) => u.includes("overpass") || u.includes("/interpreter")));
+  // 2) Every Overpass server down; the general API refuses big boxes (too
+  //    many nodes) and answers once the box has been split small enough.
+  const boxes = [];
+  service = createMapService({
+    cacheDir: await folder(t),
+    fetcher: async (url) => {
+      if (url.includes("interpreter")) return { ok: false, status: 504, json: async () => ({}) };
+      const [w, s, e, n] = new URL(url).searchParams.get("bbox").split(",").map(Number);
+      boxes.push((e - w) * (n - s));
+      if ((e - w) * (n - s) > 0.00003) return { ok: false, status: 400, json: async () => ({}) };
+      return ok({
+        elements: [
+          { type: "node", id: 1, lat: 26.2, lon: 127.67 },
+          { type: "node", id: 2, lat: 26.201, lon: 127.671 },
+          { type: "way", id: 7, nodes: [1, 2], tags: { highway: "residential" } },
+        ],
+      });
+    },
+  });
+  const fallback = await service.mapQuery(query);
+  assert.deepEqual(fallback.elements.map((e) => e.id), [7]);
+  assert.ok(boxes.some((a) => a <= 0.00003), "dense boxes were split");
+});

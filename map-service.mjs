@@ -159,17 +159,75 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
     if (data.remark) throw new Error("지도 서버가 조회를 완료하지 못했습니다.");
     return data;
   }
+  // Overpass is built for filtered queries ("drivable roads in this box"),
+  // so it is tried first on several public servers. The general OSM API
+  // returns every object in a box and refuses areas over 50,000 nodes, which
+  // dense towns such as Naha exceed; it is only a fallback, in small boxes.
+  const OVERPASS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  ];
+  async function overpass(query, signal) {
+    return saved(
+      "overpass:" + query,
+      async (shared) => {
+        let last;
+        for (const base of OVERPASS) {
+          try {
+            shared.throwIfAborted();
+            const data = await fetchJson(base + "?data=" + encodeURIComponent(query), shared, 30000);
+            if (!Array.isArray(data.elements)) throw new Error("지도 서버 응답 형식이 올바르지 않습니다.");
+            return { elements: data.elements.filter((e) => e.type === "way" || e.tags) };
+          } catch (e) {
+            if (shared.aborted) throw e;
+            last = e;
+          }
+        }
+        throw last;
+      },
+      signal,
+    );
+  }
+  async function osmBox(b, signal, depth = 0) {
+    const bbox = [b[1], b[0], b[3], b[2]].map((v) => v.toFixed(7)).join(",");
+    const key = "https://api.openstreetmap.org/api/0.6/map.json?bbox=" + bbox;
+    try {
+      return [coreGeometry(await saved(key, (s) => fetchJson(key, s, 25000), signal))];
+    } catch (e) {
+      // "Too many nodes" (HTTP 400) or a slow dense box: split into quarters.
+      if (signal?.aborted || depth >= 2) throw e;
+      const midLat = (b[0] + b[2]) / 2,
+        midLon = (b[1] + b[3]) / 2,
+        parts = [
+          [b[0], b[1], midLat, midLon],
+          [b[0], midLon, midLat, b[3]],
+          [midLat, b[1], b[2], midLon],
+          [midLat, midLon, b[2], b[3]],
+        ];
+      const out = [];
+      for (const part of parts) out.push(...(await osmBox(part, signal, depth + 1)));
+      return out;
+    }
+  }
   async function mapQuery(query, signal) {
     const bounds = queryBounds(query);
     if (!bounds.length) throw new Error("지원하지 않는 지도 조회입니다.");
+    for (const b of bounds)
+      if ((b[2] - b[0]) * (b[3] - b[1]) > 0.0025) throw new Error("지도 조회 범위가 너무 넓습니다.");
+    try {
+      return selectMapQuery(await overpass(query, signal), query);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
     const results = [];
     for (const b of bounds) {
       signal?.throwIfAborted();
-      if ((b[2] - b[0]) * (b[3] - b[1]) > 0.0025) throw new Error("지도 조회 범위가 너무 넓습니다.");
-      const bbox = [b[1], b[0], b[3], b[2]].map((v) => v.toFixed(7)).join(",");
-      const key = "https://api.openstreetmap.org/api/0.6/map.json?bbox=" + bbox;
-      const data = await saved(key, (s) => fetchJson(key, s, 16000), signal);
-      results.push(coreGeometry(data));
+      // About 1 km cells keep each general-API request well under its limits.
+      const step = 0.009;
+      for (let lat = b[0]; lat < b[2] - 1e-9; lat += step)
+        for (let lon = b[1]; lon < b[3] - 1e-9; lon += step)
+          results.push(...(await osmBox([lat, lon, Math.min(b[2], lat + step), Math.min(b[3], lon + step)], signal)));
     }
     return selectMapQuery(
       {
