@@ -12,6 +12,17 @@ import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
 import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
 import { steeringLimit } from "./vehicles.mjs";
+import {
+  makeSky,
+  SUN_DIRECTION,
+  HAZE,
+  asphaltTexture,
+  grassTexture,
+  concreteTexture,
+  facadeTexture,
+  WALL_COLORS,
+  planarUV,
+} from "./graphics.mjs";
 
 const mat = (color, roughness = 0.8, extra = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness, ...extra });
@@ -249,12 +260,23 @@ export class DriveRenderer {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#a5cbd0");
-    this.scene.fog = new THREE.FogExp2("#aec8c7", 0.0007);
+    this.scene.background = HAZE.clone();
+    this.scene.fog = new THREE.FogExp2(HAZE.clone(), 0.00085);
+    this.sky = makeSky();
+    this.scene.add(this.sky);
+    this.textures = {
+      asphalt: asphaltTexture(),
+      grass: grassTexture(),
+      concrete: concreteTexture(),
+    };
+    this.facades = WALL_COLORS.map((c) => {
+      const m = mat("#ffffff", 0.9, { map: facadeTexture(c) });
+      return m;
+    });
     const skyFaces = Array.from({ length: 6 }, (_, i) => {
       const c = document.createElement("canvas");
       c.width = c.height = 64;
@@ -271,14 +293,17 @@ export class DriveRenderer {
     environment.needsUpdate = true;
     this.scene.environment = environment;
     this.scene.environmentIntensity = 0.55;
-    this.scene.add(new THREE.HemisphereLight("#d9f5ff", "#697654", 2.0));
-    const sun = new THREE.DirectionalLight("#fff0d2", 2.5);
-    sun.position.set(-140, 220, -100);
+    this.scene.add(new THREE.HemisphereLight("#d6ecff", "#6f7a5c", 1.35));
+    // The sun and its shadow frustum follow the car so nearby shadows stay
+    // crisp wherever the drive goes.
+    const sun = new THREE.DirectionalLight("#fff1d6", 3.1);
+    sun.position.copy(SUN_DIRECTION).multiplyScalar(220);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(sun.shadow.camera, { left: -180, right: 180, top: 180, bottom: -180, far: 650 });
-    sun.shadow.bias = -0.0005;
-    this.scene.add(sun);
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 10, far: 520 });
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.04;
+    this.scene.add(sun, sun.target);
     this.sun = sun;
     this.world = new THREE.Group();
     this.roadsGroup = new THREE.Group();
@@ -411,13 +436,19 @@ export class DriveRenderer {
     disposeGroup(this.world);
     if (coast?.length) {
       const shape = new THREE.Shape(coast.map((p) => new THREE.Vector2(p.x - base.x, -(p.y - base.y))));
-      const land = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat("#8eaa7d"));
+      const land = new THREE.Mesh(
+        new THREE.ShapeGeometry(shape),
+        mat("#ffffff", 1, { map: this.textures.grass }),
+      );
       land.rotation.x = -Math.PI / 2;
       land.position.y = -0.12;
       land.receiveShadow = true;
       this.world.add(land);
     } else {
-      const land = new THREE.Mesh(new THREE.PlaneGeometry(15000, 15000), mat("#8eaa7d"));
+      const land = new THREE.Mesh(
+        new THREE.PlaneGeometry(15000, 15000),
+        mat("#ffffff", 1, { map: this.textures.grass }),
+      );
       land.rotation.x = -Math.PI / 2;
       land.position.y = -0.08;
       land.receiveShadow = true;
@@ -453,7 +484,8 @@ export class DriveRenderer {
         for (const i of [0, 2, 1, 0, 3, 2]) {
           const h = this.elevation(pts[i]);
           positions.push(pts[i].x - this.base.x, h, pts[i].y - this.base.y);
-          const c = new THREE.Color(h > 30 ? "#6e9367" : "#91a47b");
+          // Lowland fields and settlements are paler; hills carry denser forest.
+          const c = new THREE.Color(h > 30 ? "#7f9a78" : "#c4c9b1");
           colors.push(c.r, c.g, c.b);
         }
       }
@@ -461,7 +493,11 @@ export class DriveRenderer {
     g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     g.computeVertexNormals();
-    const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    planarUV(g, 9);
+    const mesh = new THREE.Mesh(
+      g,
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: this.textures.grass }),
+    );
     mesh.receiveShadow = true;
     this.terrainGroup.add(mesh);
   }
@@ -501,7 +537,12 @@ export class DriveRenderer {
           texture.anisotropy = 4;
           this.aerialTextures.set(key, texture);
         }
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 1 }));
+        // Orthophotos already contain sunlight; light them softly so they do
+        // not bleach white under the scene's sun.
+        const mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshStandardMaterial({ map: texture, roughness: 1, color: "#b9b9b2", envMapIntensity: 0.2 }),
+        );
         mesh.receiveShadow = true;
         this.world.add(mesh);
       }
@@ -563,24 +604,28 @@ export class DriveRenderer {
         }
       }
     }
-    for (const [data, color] of [
-      [shoulders, "#b5b5a0"],
-      [p, "#626a6b"],
-      [mark, "#f2f0dd"],
+    for (const [data, material, scale] of [
+      [shoulders, mat("#ffffff", 0.95, { map: this.textures.concrete }), 3],
+      [p, mat("#ffffff", 0.93, { map: this.textures.asphalt }), 5],
+      [mark, mat("#f4f2e4", 0.7), 0],
     ]) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.Float32BufferAttribute(data, 3));
       geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, mat(color, 0.98));
+      if (scale) planarUV(geo, scale);
+      const mesh = new THREE.Mesh(geo, material);
       mesh.receiveShadow = true;
       this.roadsGroup.add(mesh);
     }
   }
   setBuildings(features) {
     disposeGroup(this.buildingGroup);
-    const wall = mat("#e4e1d2"),
-      roof = mat("#a9afa4"),
-      window = mat("#668c94", 0.28, { metalness: 0.25 });
+    const roof = mat("#ffffff", 0.95, { map: this.textures.concrete });
+    const pick = (id) => {
+      let n = 2166136261;
+      for (const ch of String(id)) n = Math.imul(n ^ ch.charCodeAt(0), 16777619);
+      return this.facades[(n >>> 0) % this.facades.length];
+    };
     for (const f of features) {
       if (!f.tags.building) continue;
       const levels = Number(f.tags["building:levels"]);
@@ -592,29 +637,13 @@ export class DriveRenderer {
       );
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
       geometry.rotateX(-Math.PI / 2);
-      const mesh = new THREE.Mesh(geometry, [roof, wall]);
+      // Extruded side walls get metre-scale UVs, so one facade tile is one
+      // storey by one window bay.
+      const mesh = new THREE.Mesh(geometry, [roof, pick(f.id ?? f.center.x)]);
       mesh.position.y = this.elevation(f.center);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.buildingGroup.add(mesh);
-      if (levels && levels < 15)
-        for (let i = 1; i < f.points.length; i++) {
-          const a = f.points[i - 1],
-            b = f.points[i],
-            len = Math.hypot(b.x - a.x, b.y - a.y);
-          if (len < 5) continue;
-          const angle = Math.atan2(b.y - a.y, b.x - a.x);
-          for (let floor = 0; floor < levels; floor++)
-            for (let d = 2; d < len - 1; d += 3.6) {
-              const t = d / len,
-                pos = this.local({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, floor * 3.1 + 1.7);
-              const win = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.35), window);
-              win.position.copy(pos);
-              win.rotation.y = -angle + Math.PI / 2;
-              win.material.side = THREE.DoubleSide;
-              this.buildingGroup.add(win);
-            }
-        }
       if (f.tags.name?.includes("カンプー"))
         this.signBoard("SUNSET RESORT CANPHOU", f.center, height * 0.76, 0.0, this.buildingGroup);
     }
@@ -1185,6 +1214,9 @@ export class DriveRenderer {
       state.position.y - this.base.y,
     );
     this.rig.rotation.set(pose.pitch, -state.heading, pose.roll, "YXZ");
+    this.sun.target.position.copy(this.rig.position);
+    this.sun.position.copy(this.rig.position).addScaledVector(SUN_DIRECTION, 220);
+    this.sky.position.copy(this.rig.position);
     const anchor = this.navigationAnchor,
       layout = this.cockpitLayout,
       view = this.view || viewSettings(),
