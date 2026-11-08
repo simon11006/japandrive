@@ -1,0 +1,136 @@
+{
+  "site": "하나사키 마르셰 공용 주차장",
+  "placeIds": [
+    "kaihoumaru"
+  ],
+  "source": {
+    "name": "国土地理院 / GSI seamlessphoto",
+    "url": "https://maps.gsi.go.jp/development/ichiran.html",
+    "tile": "18/224194/110899",
+    "image": "references/gsi-18-224194-110899.jpg",
+    "method": "Visible bay markings digitized from georeferenced aerial image. Approximate, not surveyed; image capture date unverified.",
+    "facilityMap": "https://www.hanasaki-marche.com/assets/img/data/floor-map.pdf"
+  },
+  "spaces": [
+    {
+      "id": "hanasaki-01",
+      "corners": [
+        [
+          127.88404047489166,
+          26.682899868073946
+        ],
+        [
+          127.88407266139984,
+          26.68289028180006
+        ],
+        [
+          127.88409411907196,
+          26.682947799431297
+        ],
+        [
+          127.88406193256378,
+          26.682957385700345
+        ]
+      ],
+      "sourcePixels": [
+        [
+          81,
+          31
+        ],
+        [
+          87,
+          33
+        ],
+        [
+          91,
+          21
+        ],
+        [
+          85,
+          19
+        ]
+      ],
+      "accuracy": "aerial-estimate"
+    },
+    {
+      "id": "hanasaki-02",
+      "corners": [
+        [
+          127.88407266139984,
+          26.68289028180006
+        ],
+        [
+          127.88410484790802,
+          26.682880695525366
+        ],
+        [
+          127.88412630558014,
+          26.68293821316143
+        ],
+        [
+          127.88409411907196,
+          26.682947799431297
+        ]
+      ],
+      "sourcePixels": [
+        [
+          87,
+          33
+        ],
+        [
+          93,
+          35
+        ],
+        [
+          97,
+          23
+        ],
+        [
+          91,
+          21
+        ]
+      ],
+      "accuracy": "aerial-estimate"
+    },
+    {
+      "id": "hanasaki-03",
+      "corners": [
+        [
+          127.88410484790802,
+          26.682880695525366
+        ],
+        [
+          127.8841370344162,
+          26.682871109249863
+        ],
+        [
+          127.88415849208832,
+          26.682928626890774
+        ],
+        [
+          127.88412630558014,
+          26.68293821316143
+        ]
+      ],
+      "sourcePixels": [
+        [
+          93,
+          35
+        ],
+        [
+          99,
+          37
+        ],
+        [
+          103,
+          25
+        ],
+        [
+          97,
+          23
+        ]
+      ],
+      "accuracy": "aerial-estimate"
+    }
+  ]
+}

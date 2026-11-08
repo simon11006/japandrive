@@ -1,0 +1,12 @@
+{
+  "source": "国土地理院 / GSI seamlessphoto",
+  "url": "https://maps.gsi.go.jp/development/ichiran.html",
+  "z": 18,
+  "x": 224194,
+  "y": 110899,
+  "center": [
+    127.884,
+    26.6825
+  ],
+  "note": "Imagery capture date is not verified. Parking geometry is digitized from this reference, not a field survey."
+}

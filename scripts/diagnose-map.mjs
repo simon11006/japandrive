@@ -1,0 +1,4 @@
+import{writeFile}from'node:fs/promises';
+const query='[out:json][timeout:15];way(around:400,26.3202022,127.7610734)[amenity=parking];out geom;';
+const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+for(const endpoint of endpoints){const before=Date.now();try{const url=endpoint+'?'+new URLSearchParams({data:query});const r=await fetch(url,{signal:AbortSignal.timeout(19000),headers:{'User-Agent':'JapanDrive/0.5 (local development)'}});const body=await r.text();console.log(JSON.stringify({provider:new URL(endpoint).hostname,ms:Date.now()-before,status:r.status,bytes:body.length,preview:body.slice(0,100)}));if(r.ok){const data=JSON.parse(body);if(!data.remark){await writeFile('data/aqua-parking.raw.json',body);break;}}}catch(e){console.log(JSON.stringify({provider:new URL(endpoint).hostname,ms:Date.now()-before,error:e.message}));}}

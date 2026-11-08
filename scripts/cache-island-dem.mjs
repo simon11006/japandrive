@@ -1,0 +1,4 @@
+import{writeFile}from'node:fs/promises';
+const z=11,n=2**z,tile=(lon,lat)=>({x:Math.floor((lon+180)/360*n),y:Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n)}),nw=tile(127.60,26.91),se=tile(128.36,26.02),tiles=[];
+for(let x=nw.x;x<=se.x;x++)for(let y=nw.y;y<=se.y;y++){const path=`references/dem-${z}-${x}-${y}.png`;const r=await fetch(`https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`,{signal:AbortSignal.timeout(12000)});if(r.ok){await writeFile(path,new Uint8Array(await r.arrayBuffer()));tiles.push({z,x,y,path});}}
+await writeFile('data/terrain-atlas.json',JSON.stringify({source:'https://maps.gsi.go.jp/development/ichiran.html',note:'GSI low zoom DEM provides continuous island-scale terrain. Local z14 imagery refines Motobu; heights are not a survey of road decks.',tiles}));console.log(tiles.length+' terrain tiles saved');

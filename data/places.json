@@ -1,0 +1,32 @@
+{
+  "source": "오키나와 첫 운전 연습용 숙소·식당·관광지. 위치 출처는 항목별 기록.",
+  "places": [
+    {"id":"canphou","name":"Sunset Resort Canphou","kind":"stay","section":"north","osm":"node/11208507461"},
+    {"id":"aqua-palace","name":"Aqua Palace Chatan by Coldio Premium","kind":"stay","section":"central","osm":"node/11345396003"},
+    {"id":"mine","name":"오키나와 소바 미네","kind":"food","section":"south","lat":26.1395214478,"lon":127.7795872735,"source":"https://map.yahoo.co.jp/v3/place/MZZnWE8PU_w/map","official":"https://www.minesoba.com/","note":"공식 주소와 지도 장소 일치 확인 · 주차장 입구 미검증"},
+    {"id":"kaihoumaru","name":"카이호우마루","kind":"food","section":"north","osm":"node/11210914767"},
+    {"id":"inoh","name":"이노 레스토랑","kind":"food","section":"north","match":"イノー|Inoh|いのー","sharedWith":"churaumi","note":"수족관 내부 식당 · 수족관 도착 지점을 공유"},
+    {"id":"ocean-boo","name":"오션Boo! 미라우미점","kind":"food","section":"north","lat":26.699736,"lon":127.9094382,"source":"https://oshanboochuraumi.owst.jp/map","official":"https://ocean-boo.com/store/cyuraumi/","note":"매장 운영 지도 좌표 · 공식 소개와 지도의 번지 표기가 달라 진입 위치 재확인 필요"},
+    {"id":"blue-entrance","name":"블루 엔트런스 키친","kind":"food","section":"central","osm":"node/9653390980"},
+    {"id":"steak88-chatan","name":"스테이크하우스88 차탄점","kind":"food","section":"central","osm":"node/5777598627"},
+    {"id":"unai","name":"슈리 아야고항 우나이","kind":"food","section":"south","match":"うない|あやごはん|彩ごはん"},
+    {"id":"ryukyu-beef","name":"류큐노우시 차탄점","kind":"food","section":"central","osm":"node/6018882685"},
+    {"id":"airport-food","name":"나하공항 국제선 푸드코트 / 포타마","kind":"food","section":"south","sharedWith":"naha-airport","note":"공항 내부 식당 · 공항 도착 지점을 공유"},
+    {"id":"pineapple","name":"나고 파인애플파크","kind":"sight","section":"north","osm":"way/1213088169"},
+    {"id":"churaumi","name":"츄라우미 수족관","kind":"sight","section":"north","match":"美ら海水族館"},
+    {"id":"kouri-tower","name":"고우리 오션타워","kind":"sight","section":"north","osm":"node/4592400200","extension":"kouri"},
+    {"id":"kouri-beach","name":"고우리비치","kind":"sight","section":"north","match":"古宇利ビーチ|古宇利.*海水浴","extension":"kouri"},
+    {"id":"manzamo","name":"만좌모","kind":"sight","section":"central","osm":"node/2004524873"},
+    {"id":"ryukyu-village","name":"류큐무라","kind":"sight","section":"central","osm":"way/396210563"},
+    {"id":"american-village","name":"아메리칸빌리지","kind":"shop","section":"central","match":"アメリカンビレッジ|American Village"},
+    {"id":"shuri","name":"슈리성공원","kind":"sight","section":"south","osm":"node/1068043305"},
+    {"id":"okinawa-world","name":"오키나와 월드","kind":"sight","section":"south","osm":"way/1417147676"},
+    {"id":"gyokusendo","name":"교쿠센도 종유동굴","kind":"sight","section":"south","sharedWith":"okinawa-world","note":"오키나와 월드 내부 동굴 · 공원 도착 지점을 공유"},
+    {"id":"chinen","name":"치넨미사키 · 치넨곶","kind":"sight","section":"south","match":"知念岬"},
+    {"id":"onna-station","name":"온나노에키","kind":"shop","section":"central","match":"おんなの駅"},
+    {"id":"iias","name":"이아스 오키나와 토요사키","kind":"shop","section":"south","match":"イーアス"},
+    {"id":"kyoda","name":"도로휴게소 쿄다","kind":"shop","section":"north","match":"道の駅.*許田"},
+    {"id":"naha-airport","name":"나하공항 국제선 터미널","kind":"transport","section":"south","osm":"relation/20229942"},
+    {"id":"you-i","name":"유아이렌터카 나하공항점","kind":"transport","section":"south","lat":26.177168,"lon":127.653905,"source":"https://www.you-i.okinawa/ko/office/nahaairport/","note":"공식 공항점 지도 좌표 · 주차장 입구 미검증"}
+  ]
+}

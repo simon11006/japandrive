@@ -1,0 +1,14 @@
+import{readFile,writeFile}from'node:fs/promises';
+import{coreGeometry}from'../map-service.mjs';
+import{projection,REGIONS}from'../map-data.mjs';
+const data=coreGeometry(JSON.parse(await readFile('data/osm-aqua.raw.json','utf8'))),z=18,n=2**z,tx=224104,ty=111194;
+const geo=([px,py])=>[(tx+px/256)/n*360-180,Math.atan(Math.sinh(Math.PI*(1-2*(ty+py/256)/n)))*180/Math.PI];
+const polygon=[[135,35],[171,21],[184,43],[199,72],[175,85],[152,70]].map(geo);
+const site={id:'aqua-palace',name:'아쿠아 팰리스 차탄 숙소 전용 주차장',type:'area',polygon,official:'https://coldioresort.com/condominium/aqua-palace-chatan',source:'https://maps.gsi.go.jp/development/ichiran.html',reference:{z,tx,ty,pixelPolygon:[[135,35],[171,21],[184,43],[199,72],[175,85],[152,70]]},note:'Official property parking exists. Polygon approximated from the open area beside the mapped hotel in GSI imagery; individual bays and the exact gate have not been surveyed.'};
+await writeFile('data/destination-sites.json',JSON.stringify({sites:[site]}));
+await writeFile('data/aqua-scene.json',JSON.stringify({source:'https://api.openstreetmap.org/api/0.6/map.json?bbox=127.757,26.317,127.765,26.324',elements:data.elements.filter(e=>e.type==='way'&&(e.tags.building||e.tags.amenity==='parking'))}));
+const p=projection(REGIONS.find(r=>r.id==='okinawa').origin),locals=polygon.map(p.toLocal),center=locals.reduce((a,q)=>({x:a.x+q.x/locals.length,y:a.y+q.y/locals.length}),{x:0,y:0}),target=p.toGeo(center),start=[127.880073,26.6840203];
+const url='https://routing.openstreetmap.de/routed-car/route/v1/driving/'+start.join(',')+';'+target.join(',')+'?overview=full&geometries=geojson&steps=true';
+const r=await fetch(url,{signal:AbortSignal.timeout(20000)});if(!r.ok)throw new Error('Route '+r.status);const route=await r.json();if(route.code!=='Ok')throw new Error(route.code);
+const routes=JSON.parse(await readFile('data/training-routes.json','utf8'));routes.routes=routes.routes.filter(r=>r.name!=='canphou-aqua');routes.routes.push({name:'canphou-aqua',start,end:target,provider:url,data:route});await writeFile('data/training-routes.json',JSON.stringify(routes));
+console.log(JSON.stringify({distance:route.routes[0].distance,end:target,scene:data.elements.filter(e=>e.tags.building).length}));

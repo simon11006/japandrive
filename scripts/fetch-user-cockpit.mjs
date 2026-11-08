@@ -1,0 +1,3 @@
+import{writeFile}from'node:fs/promises';
+const files=[['getcha-alphard-dashboard.jpg','https://img.getcha.io/file/community/live/20250623/1750643655962uy.JPEG?width=1200'],['getcha-alphard-camera.jpg','https://img.getcha.io/file/community/live/20250623/1750643859472Fy.JPEG?width=1200'],['getcha-alphard-console.jpg','https://img.getcha.io/file/community/live/20250623/1750644014674PM.JPEG?width=1200']];
+for(const[name,url]of files){const r=await fetch(url,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error(`${name}: ${r.status}`);const bytes=new Uint8Array(await r.arrayBuffer());await writeFile('references/'+name,bytes);console.log(name,bytes.length);}
