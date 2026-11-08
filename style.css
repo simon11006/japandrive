@@ -3074,3 +3074,432 @@ body.on-title header {
   color: #ffeec6;
   font-size: 14px;
 }
+
+/* ---------- Setup flow: game skin, matching the title screen ---------- */
+body.in-menu header { display: none; }
+#select.game-ui {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  padding: calc(7vh + 18px) 5vw calc(7vh + 90px);
+  background:
+    radial-gradient(ellipse 80% 70% at 60% 45%, #06121a66 0%, #040b10e6 100%);
+  color: #e8f0eb;
+  z-index: 4;
+}
+#select.game-ui::before,
+#select.game-ui::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 7vh;
+  background: #020507;
+  z-index: 6;
+  pointer-events: none;
+}
+#select.game-ui::before { top: 0; }
+#select.game-ui::after { bottom: 0; }
+#select.game-ui > * { max-width: 1240px; margin-left: auto; margin-right: auto; }
+#select.game-ui .intro {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 4px 22px;
+  margin-bottom: 18px;
+}
+#select.game-ui #step-caption {
+  grid-column: 1 / -1;
+  font: italic 800 14px/1 "Arial Black", Arial, sans-serif;
+  letter-spacing: 6px;
+  color: #ffe24a;
+}
+#select.game-ui #step-title {
+  grid-column: 1;
+  margin: 6px 0 0;
+  padding: 12px 26px 14px 22px;
+  background: linear-gradient(180deg, #13764d, #0d6040);
+  border: 4px solid #f3f6ef;
+  outline: 3px solid #0d6040;
+  border-radius: 10px;
+  font: 900 clamp(26px, 3.2vw, 44px)/1.1 "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  letter-spacing: -1px;
+  color: #fff;
+  text-shadow: 0 2px 0 #0a4a31;
+  box-shadow: 0 16px 40px #0009;
+  animation: plate-in .45s cubic-bezier(.2,.9,.25,1.2) both;
+}
+@keyframes plate-in {
+  from { transform: translateX(-30px) skewX(-6deg); opacity: 0; }
+}
+#select.game-ui #step-description {
+  grid-column: 2;
+  align-self: center;
+  margin: 8px 0 0;
+  color: #c9dbd2;
+  font-size: 15px;
+}
+#select.game-ui #back-title {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: start;
+  background: #0b1a20cc;
+  border: 1px solid #ffffff2a;
+  color: #dbe7e1;
+  padding: 9px 16px;
+  transform: skewX(-8deg);
+  border-radius: 0;
+}
+/* Stage tabs */
+#select.game-ui .step-progress {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+  list-style: none;
+}
+#select.game-ui .step-progress li { border: 0; padding: 0; }
+#select.game-ui .step-progress li::after { display: none; }
+#select.game-ui .step-progress button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #08151ccc;
+  border: 0;
+  border-bottom: 3px solid #ffffff1a;
+  color: #8fa59b;
+  font-weight: 700;
+  transform: skewX(-10deg);
+  border-radius: 0;
+}
+#select.game-ui .step-progress button > * { transform: skewX(10deg); }
+#select.game-ui .step-progress .step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 4px;
+  background: #1c2c33;
+  color: #9fb5ab;
+  font: italic 800 13px/1 "Arial Black", Arial, sans-serif;
+}
+#select.game-ui .step-progress li.passed button { color: #cfe7da; border-bottom-color: #3aa36b; }
+#select.game-ui .step-progress li.passed .step-number { background: #13764d; color: #fff; }
+#select.game-ui .step-progress li.current button {
+  background: linear-gradient(90deg, #13764d, #0f5e3e);
+  color: #fff;
+  border-bottom-color: #ffe24a;
+}
+#select.game-ui .step-progress li.current .step-number { background: #ffe24a; color: #0d3a26; }
+#select.game-ui .step-progress button:disabled { opacity: .45; }
+/* Shared panel look */
+#select.game-ui .places-panel,
+#select.game-ui .trip-panel,
+#select.game-ui .vehicle-section,
+#select.game-ui .difficulty-panel {
+  background: #07141bd9;
+  border: 1px solid #ffffff1c;
+  border-top: 3px solid #ffe24a;
+  box-shadow: 0 24px 60px #0008;
+  backdrop-filter: blur(6px);
+  padding: 18px 20px;
+  border-radius: 0;
+}
+#select.game-ui label { color: #9fb5ab; font-size: 13px; letter-spacing: 1px; }
+#select.game-ui select,
+#select.game-ui input[type="search"] {
+  background: #0c1d24;
+  border: 1px solid #ffffff26;
+  border-left: 3px solid #13764d;
+  border-radius: 0;
+  color: #f0f6f2;
+}
+#select.game-ui select:focus,
+#select.game-ui input:focus { outline: none; border-color: #ffe24a; box-shadow: 0 0 0 2px #ffe24a44; }
+/* Regions = stage select */
+#select.game-ui .region-tabs button {
+  border-radius: 0;
+  border: 2px solid #ffffff22;
+  transform: skewX(-4deg);
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+}
+#select.game-ui .region-tabs button > * { transform: skewX(4deg); }
+#select.game-ui .region-tabs button:hover { transform: skewX(-4deg) translateY(-4px); border-color: #ffe24a88; }
+#select.game-ui .region-tabs button.active {
+  border-color: #ffe24a;
+  box-shadow: 0 0 0 3px #ffe24a33, 0 18px 40px #000a;
+}
+/* Garage */
+#select.game-ui .vehicle-heading small { color: #ffe24a; font: italic 800 13px Arial, sans-serif; letter-spacing: 4px; }
+#select.game-ui .vehicle-card {
+  border-radius: 0;
+  border: 2px solid #ffffff1f;
+  background: linear-gradient(160deg, #10232b, #0a171d);
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+}
+#select.game-ui .vehicle-card:hover { transform: translateY(-4px); border-color: #ffe24a88; }
+#select.game-ui .vehicle-card.selected {
+  border-color: #ffe24a;
+  background: linear-gradient(160deg, #13764d, #0b3d2a);
+  box-shadow: 0 0 0 3px #ffe24a33, 0 18px 40px #000a;
+}
+#select.game-ui .vehicle-card strong { font-size: 22px; }
+.stat-bars { display: grid; gap: 5px; margin-top: 10px; }
+.stat-bars div { display: grid; grid-template-columns: 6.5em 1fr 3.4em; align-items: center; gap: 8px; font-size: 12px; color: #c4d6cc; }
+.stat-bars i { display: block; height: 7px; background: #ffffff1a; transform: skewX(-20deg); }
+.stat-bars b { display: block; height: 100%; background: linear-gradient(90deg, #3ad17e, #ffe24a); }
+.stat-bars span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+/* Place cards = level select */
+#select.game-ui .place {
+  border-radius: 0;
+  border: 2px solid #ffffff1f;
+  background: #0b1a20;
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+}
+#select.game-ui .place:hover { border-color: #ffe24a88; }
+#select.game-ui .place.chosen {
+  border-color: #ffe24a;
+  box-shadow: 0 0 0 3px #ffe24a33, 0 20px 50px #000b;
+}
+#select.game-ui .place .kind { color: #ffe24a; font-weight: 700; letter-spacing: 1px; }
+#select.game-ui .place-number {
+  font: italic 900 46px/1 "Arial Black", Arial, sans-serif;
+  color: #ffffff2e;
+}
+#select.game-ui .place.chosen .place-number { color: #ffe24a; }
+#select.game-ui .carousel-arrow {
+  border-radius: 0;
+  background: #13764d;
+  border: 2px solid #f3f6ef;
+  color: #fff;
+  transform: skewX(-8deg);
+}
+#select.game-ui .carousel-arrow:hover { background: #18915e; }
+/* Traffic level */
+#select.game-ui .difficulty-card {
+  border-radius: 0;
+  border: 2px solid #ffffff1f;
+  transform: skewX(-4deg);
+  transition: transform .15s, border-color .15s;
+}
+#select.game-ui .difficulty-card > * { transform: skewX(4deg); }
+#select.game-ui .difficulty-card:hover { transform: skewX(-4deg) translateY(-4px); }
+#select.game-ui .difficulty-card.selected {
+  border-color: #ffe24a;
+  background: linear-gradient(160deg, #13764d, #0b3d2a);
+  box-shadow: 0 0 0 3px #ffe24a33;
+}
+/* Ready screen */
+#select.game-ui .trip-details strong { font-size: 24px; }
+#select.game-ui #start {
+  border-radius: 0;
+  transform: skewX(-8deg);
+  background: linear-gradient(90deg, #ffe24a, #f4c430);
+  color: #10301f;
+  font: 900 22px/1 "Malgun Gothic", sans-serif;
+  letter-spacing: 2px;
+  padding: 18px;
+  box-shadow: 0 0 0 0 #ffe24a88;
+  animation: start-pulse 1.6s ease-in-out infinite;
+}
+#select.game-ui #start:disabled { animation: none; opacity: .5; }
+@keyframes start-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 #ffe24a66; }
+  50% { box-shadow: 0 0 0 10px #ffe24a00; }
+}
+/* Bottom command bar */
+#select.game-ui .wizard-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 7vh;
+  z-index: 7;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 5vw;
+  background: linear-gradient(0deg, #040b10f2, #040b10b0);
+  border-top: 1px solid #ffffff1a;
+}
+#select.game-ui .wizard-controls button {
+  border-radius: 0;
+  transform: skewX(-10deg);
+  padding: 12px 26px;
+  font-weight: 800;
+  font-size: 16px;
+}
+#select.game-ui #step-back { background: #0f2129; border: 1px solid #ffffff2e; color: #dbe7e1; }
+#select.game-ui #step-next {
+  background: linear-gradient(90deg, #ffe24a, #f4c430);
+  color: #10301f;
+  border: 0;
+  min-width: 220px;
+}
+#select.game-ui #step-next:disabled { background: #2a3a3f; color: #7f938b; }
+#select.game-ui #step-selection { color: #c9dbd2; font-size: 14px; }
+#select.game-ui kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 6px;
+  border: 1px solid currentColor;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font: 11px Arial, sans-serif;
+  opacity: .8;
+}
+#select.game-ui .bottom-note { opacity: .7; }
+@media (max-width: 760px) {
+  #select.game-ui .intro { grid-template-columns: 1fr; }
+  #select.game-ui #step-description, #select.game-ui #back-title { grid-column: 1; grid-row: auto; }
+  #select.game-ui .step-progress { grid-template-columns: repeat(3, 1fr); }
+  #select.game-ui .wizard-controls button { padding: 10px 14px; }
+}
+/* Keep cards clear of the fixed command bar on short screens. */
+#select.game-ui .place-map { height: 120px; }
+#select.game-ui .place { min-height: 0; }
+#select.game-ui #overview { min-height: 0; height: min(46vh, 380px); }
+#select.game-ui .trip-panel { max-height: none; }
+
+/* ---------- Driving HUD: bottom centre, large and readable ---------- */
+body.driving #driving-status.drive-hud,
+#driving-status.drive-hud {
+  position: fixed;
+  top: auto;
+  right: auto;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: grid;
+  grid-template-columns: auto auto auto auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px 12px;
+  background: linear-gradient(180deg, #06121ae6, #040b10f2);
+  border: 1px solid #ffffff26;
+  border-top: 3px solid #ffe24a;
+  border-radius: 14px;
+  box-shadow: 0 14px 40px #000b;
+  color: #eef5f1;
+  min-width: 0;
+}
+.drive-hud .live-velocity {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: end;
+  column-gap: 8px;
+  min-width: 150px;
+  justify-content: center;
+}
+.drive-hud .live-velocity strong {
+  grid-row: 1 / span 2;
+  font: italic 900 58px/0.9 "Arial Black", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 2.2ch;
+  color: #fff;
+}
+.drive-hud .live-velocity small { font-size: 13px; color: #b9cbc2; }
+.drive-hud .live-velocity b {
+  font: 900 20px/1 Arial, sans-serif;
+  color: #5dff9a;
+}
+.drive-hud .live-velocity b.park { color: #ffb347; }
+.drive-hud .live-velocity b.reverse { color: #ff7262; }
+.drive-hud #speed-limit {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #fff;
+  border: 7px solid #d93025;
+  color: #1a3c8c;
+  font: 900 24px/1 Arial, sans-serif;
+  position: relative;
+}
+.drive-hud #speed-limit small {
+  position: absolute;
+  bottom: -20px;
+  white-space: nowrap;
+  font: 11px "Malgun Gothic", sans-serif;
+  color: #b9cbc2;
+}
+.drive-hud #speed-limit.unknown { background: #2a3a3f; border-color: #5a6c70; color: #c9d6d0; font-size: 18px; }
+.drive-hud #speed-limit.over { animation: limit-flash .6s steps(2) infinite; }
+@keyframes limit-flash { 50% { background: #ffd6d2; } }
+.drive-hud .live-score { display: grid; justify-items: center; }
+.drive-hud .live-score small { font-size: 11px; color: #b9cbc2; }
+.drive-hud .live-score strong { font: 900 30px/1 Arial, sans-serif; color: #ffe24a; }
+.drive-hud .hud-blinker { display: grid; justify-items: center; gap: 2px; }
+.drive-hud .hud-blinker span { font-size: 34px; line-height: 1; color: #22382f; transition: color .05s; }
+.drive-hud .hud-blinker span.lit { color: #45f27e; text-shadow: 0 0 14px #45f27ecc; }
+.drive-hud kbd {
+  padding: 1px 6px;
+  border: 1px solid #ffffff44;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font: 11px Arial, sans-serif;
+  color: #c9d6d0;
+}
+#blink-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  margin: 0;
+  white-space: nowrap;
+  padding: 5px 12px;
+  background: #0f3d26ee;
+  border: 1px solid #45f27e77;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #d8ffe6;
+}
+/* Leave room for the HUD: hint box bottom-left, controls bottom-right. */
+body.driving #hint { bottom: 16px; max-width: calc(50vw - 260px); }
+header kbd { font-size: 10px; padding: 0 4px; border: 1px solid #ffffff55; border-radius: 3px; margin-left: 4px; }
+/* ---------- Manual ---------- */
+.game-dialog.manual > div { max-width: 760px; width: min(760px, 94vw); max-height: 86vh; overflow-y: auto; text-align: left; }
+.manual-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+.manual-tabs button {
+  border-radius: 0;
+  transform: skewX(-10deg);
+  background: #0f2129;
+  border: 1px solid #ffffff26;
+  color: #c9dbd2;
+  padding: 8px 14px;
+  font-weight: 700;
+}
+.manual-tabs button.active { background: #13764d; color: #fff; border-color: #ffe24a; }
+.key-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.key-table td { padding: 8px 10px; border-bottom: 1px solid #ffffff14; vertical-align: top; }
+.key-table td:first-child { white-space: nowrap; width: 1%; color: #ffe24a; }
+.manual kbd {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid #ffffff55;
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  background: #0c1d24;
+  font: 12px Arial, sans-serif;
+  color: #fff;
+}
+.manual-steps, .manual-list { padding-left: 1.2em; line-height: 1.7; font-size: 14px; }
+.manual-steps li, .manual-list li { margin-bottom: 8px; }
+@media (max-width: 760px) {
+  #driving-status.drive-hud { gap: 10px; padding: 8px 12px; bottom: auto; top: 8px; }
+  .drive-hud .live-velocity strong { font-size: 40px; }
+  .drive-hud #speed-limit { width: 48px; height: 48px; font-size: 18px; border-width: 5px; }
+  #blink-hint { white-space: normal; width: 80vw; bottom: auto; top: calc(100% + 8px); }
+}

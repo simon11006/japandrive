@@ -21,6 +21,7 @@ import {
   turnSide,
   playerAtFault,
   BLINKER_LEAD_METRES,
+  VIOLATIONS,
 } from "./driving-rules.mjs";
 import { DriveAudio } from "./audio.mjs";
 import {
@@ -168,7 +169,14 @@ function renderVehicles() {
         v.id === "prius"
           ? "M8 39 L18 28 L46 13 L77 15 L101 33 L112 38 L112 51 L7 51 Z"
           : "M8 32 L27 12 L99 12 L111 25 L113 51 L7 51 Z";
-      button.innerHTML = `<svg viewBox="0 0 120 65" aria-hidden="true"><path d="${silhouette}" fill="#d1dbd8" stroke="#c8eece" stroke-width="1.5"/><path d="${v.id === "prius" ? "M23 28 L47 17 L75 19 L91 30 Z" : "M30 16 L96 16 L104 29 L20 29 Z"}" fill="#35525b"/><circle cx="29" cy="49" r="9" fill="#0d1922"/><circle cx="93" cy="49" r="9" fill="#0d1922"/><circle cx="29" cy="49" r="4" fill="#6a8188"/><circle cx="93" cy="49" r="4" fill="#6a8188"/></svg><div><strong>${v.name}</strong><small>${v.trim}</small><span class="specs">전장 ${(v.length * 1000).toFixed(0)} · 전폭 ${(v.width * 1000).toFixed(0)} mm<br>축거 ${(v.wheelbase * 1000).toFixed(0)} mm · 최소 회전 반경 ${v.turningRadius.toFixed(1)} m</span></div>`;
+      button.innerHTML = `<svg viewBox="0 0 120 65" aria-hidden="true"><path d="${silhouette}" fill="#d1dbd8" stroke="#c8eece" stroke-width="1.5"/><path d="${v.id === "prius" ? "M23 28 L47 17 L75 19 L91 30 Z" : "M30 16 L96 16 L104 29 L20 29 Z"}" fill="#35525b"/><circle cx="29" cy="49" r="9" fill="#0d1922"/><circle cx="93" cy="49" r="9" fill="#0d1922"/><circle cx="29" cy="49" r="4" fill="#6a8188"/><circle cx="93" cy="49" r="4" fill="#6a8188"/></svg><div><strong>${v.name}</strong><small>${v.trim}</small><span class="specs">전장 ${(v.length * 1000).toFixed(0)} · 전폭 ${(v.width * 1000).toFixed(0)} mm<br>축거 ${(v.wheelbase * 1000).toFixed(0)} mm · 최소 회전 반경 ${v.turningRadius.toFixed(1)} m</span><div class="stat-bars">${[
+        ["차체 길이", v.length / 5.2, `${v.length.toFixed(2)} m`],
+        ["차폭", v.width / 2.0, `${v.width.toFixed(2)} m`],
+        ["차 높이", v.height / 2.0, `${v.height.toFixed(2)} m`],
+        ["최소 회전 반경", v.turningRadius / 6.5, `${v.turningRadius.toFixed(1)} m`],
+      ]
+        .map(([n, f, t]) => `<div><span>${n}</span><i><b style="width:${Math.round(f * 100)}%"></b></i><span>${t}</span></div>`)
+        .join("")}</div></div>`;
       button.onclick = () => {
         car = v;
         renderVehicles();
@@ -696,8 +704,13 @@ function showWizardStep(step, focus = true) {
   $(".places-panel").hidden = ![3, 4].includes(wizardStep);
   $(".trip-panel").hidden = wizardStep !== 6;
   $("#difficulty-panel").hidden = wizardStep !== 5;
-  $("#step-caption").textContent = `드라이브 준비 · ${wizardStep} / 6`;
+  $("#step-caption").textContent = `STEP ${wizardStep} / 6 · ${wizardLabels[wizardStep - 1]}`;
   $("#step-title").textContent = wizardTitles[wizardStep - 1];
+  // Replay the sign-plate entrance and a menu sound on every step change.
+  $("#step-title").style.animation = "none";
+  void $("#step-title").offsetWidth;
+  $("#step-title").style.animation = "";
+  if (!$("#select").hidden) uiBlip();
   $("#step-description").textContent = wizardDescriptions[wizardStep - 1];
   $("#step-progress").replaceChildren(
     ...wizardLabels.map((name, i) => {
@@ -1139,6 +1152,7 @@ $("#start").onclick = async () => {
     $("#result").hidden = true;
     $("#splash").hidden = true;
     setTitle(false);
+    document.body.classList.remove("in-menu");
     document.body.classList.add("driving");
     window.scrollTo(0, 0);
     $("#trip-status").textContent = `${distanceText(routeInfo.distance)} · 자동차 경로 연결됨`;
@@ -1199,6 +1213,7 @@ $("#menu").onclick = () => {
   $("#menu").hidden = true;
   $("#result").hidden = true;
   document.body.classList.remove("driving");
+  document.body.classList.add("in-menu");
   maxReachedStep = 6;
   showWizardStep(4);
   drawOverview();
@@ -1446,6 +1461,9 @@ function hud() {
   });
   Object.assign($("#telemetry").dataset, { signalColor, signalDistance: nearbySignal?.ahead ?? -1 });
   $("#live-speed").textContent = Math.round(speed * 3.6);
+  $("#live-gear").textContent = parkingBrake ? "P" : gear > 0 ? "D" : "R";
+  $("#live-gear").className = parkingBrake ? "park" : gear < 0 ? "reverse" : "";
+  $("#blink-hint").hidden = !blinker;
   $("#speed-limit-value").textContent = currentLimit.value ?? "—";
   $("#speed-limit-note").textContent = currentLimit.value ? "제한속도" : "표지 확인";
   $("#speed-limit").classList.toggle("unknown", currentLimit.value == null);
@@ -1624,6 +1642,7 @@ const menuItems = () => [...document.querySelectorAll("#title-menu .menu-item")]
 let menuIndex = 0;
 function setTitle(on) {
   document.body.classList.toggle("on-title", on);
+  if (on) document.body.classList.remove("in-menu");
   if (on) {
     $("#title-menu").hidden = true;
     $("#press-start").hidden = false;
@@ -1678,9 +1697,24 @@ window.addEventListener("keydown", (e) => {
     setTitle(true);
   }
 });
+// Setup flow keys: Enter = next, Esc = back (title from step 1).
+window.addEventListener("keydown", (e) => {
+  if ($("#select").hidden || active || document.querySelector(".game-dialog:not([hidden])")) return;
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key === "Enter" && e.target === document.body) {
+    e.preventDefault();
+    if (wizardStep === 6) $("#start").click();
+    else if (!$("#step-next").disabled) $("#step-next").click();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    if (wizardStep > 1) $("#step-back").click();
+    else returnToTitle();
+  }
+});
 function openWizard() {
   intro = false;
   setTitle(false);
+  document.body.classList.add("in-menu");
   $("#splash").hidden = true;
   $("#select").hidden = false;
   $("#select").classList.remove("from-title");
@@ -1726,15 +1760,49 @@ function returnToTitle() {
   $("#result").hidden = true;
   document.body.classList.remove("driving");
 }
-for (const id of ["#help-open", "#splash-help"])
-  $(id).onclick = () => {
-    if (active) paused = true;
-    $("#help").hidden = false;
-  };
+// Manual: tabs, a penalty table generated from the scoring rules, and
+// H / F1 to open it at any time (driving pauses while it is open).
+let manualWasPaused = false;
+function openManual() {
+  manualWasPaused = paused;
+  if (active) {
+    paused = true;
+    keys.clear();
+  }
+  $("#pause-menu").hidden = true;
+  $("#help").hidden = false;
+}
+for (const id of ["#help-open", "#splash-help", "#pause-manual"]) $(id).onclick = openManual;
 $("#help-close").onclick = () => {
   $("#help").hidden = true;
-  if (active) paused = false;
+  if (active) {
+    paused = manualWasPaused;
+    $("#pause-menu").hidden = !paused;
+  }
 };
+for (const tab of document.querySelectorAll(".manual-tabs button"))
+  tab.onclick = () => {
+    for (const t of document.querySelectorAll(".manual-tabs button")) t.classList.toggle("active", t === tab);
+    for (const section of document.querySelectorAll("#help section"))
+      section.hidden = section.dataset.tab !== tab.dataset.tab;
+  };
+$("#manual-penalties").replaceChildren(
+  ...Object.values(VIOLATIONS)
+    .filter((v) => v.penalty > 0)
+    .map((v) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${v.name}</td><td>-${v.penalty}점</td>`;
+      return row;
+    }),
+);
+window.addEventListener("keydown", (e) => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.code === "F1" || (e.code === "KeyH" && !e.repeat)) {
+    e.preventDefault();
+    if ($("#help").hidden) openManual();
+    else $("#help-close").click();
+  }
+});
 // Seat and field-of-view settings, saved per browser.
 let viewWasPaused = false;
 function showViewSettings() {
