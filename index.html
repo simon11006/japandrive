@@ -1,46 +1,291 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>일본 드라이브 · 오키나와 운전 연습</title><link rel="stylesheet" href="style.css"></head>
-<body>
-  <canvas id="scene" aria-label="오키나와 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
-  <div id="engine-error" role="alert"></div>
-  <header><a class="brand" href="/">JD <span>일본 드라이브</span></a><div class="header-right"><span class="badge">테스트 0.6</span><button id="fullscreen">전체 화면</button><button id="help-open">조작 방법</button><button id="menu" hidden>목적지 변경</button></div></header>
-  <section id="splash" class="splash">
-    <div class="splash-atmosphere" aria-hidden="true"></div><div class="splash-content"><span class="intro-location"><i></i> 오키나와 본섬</span><p class="eyebrow">처음 만나는 일본의 길</p><h1>일본<span>드라이브<span class="title-dot">.</span></span></h1><p class="splash-tagline">내비게이션을 따라 달리고,<br>목적지 주차까지 직접 완성하세요.</p><div class="splash-menu"><button id="play" class="play-button"><span>드라이브 시작</span><b aria-hidden="true">↗</b></button><button id="splash-help">조작 방법 <span aria-hidden="true">＋</span></button></div><p id="intro-status" class="fine" role="status">오키나와 지도를 불러오는 중…</p></div>
-    <div class="intro-map-panel"><div class="intro-map-heading"><span>이번 드라이브의 무대</span><strong>오키나와 본섬</strong></div><canvas id="intro-map" aria-label="오키나와 본섬과 드라이브 목적지 지도"></canvas><div class="intro-map-note"><span class="map-dot"></span> 숙소 · 식당 · 관광지 <span>남부에서 북부까지</span></div></div>
-    <div class="splash-bottom"><span>좌측통행 <i>／</i> 우핸들 <i>／</i> 실제 지도 기반</span><span>출발부터 주차까지, 하나의 드라이브.</span></div>
-  </section>
-  <main id="select" hidden>
-    <div class="intro"><small id="step-caption">드라이브 준비 · 1 / 6</small><h1 id="step-title" tabindex="-1">어디로 떠날까요?</h1><p id="step-description">달리고 싶은 지역부터 골라 주세요.</p><button id="back-title">← 타이틀 화면</button></div>
-    <ol id="step-progress" class="step-progress" aria-label="드라이브 준비 단계"></ol>
-    <div id="regions" class="region-tabs"></div>
-    <section class="vehicle-section" hidden><div class="vehicle-heading"><small>함께 달릴 차량</small><span>일본 사양 · 우핸들</span></div><div id="vehicles" class="vehicles"></div><p class="fine">프리우스로 가볍게, 알파드로 여유롭게. 두 차량의 크기와 회전 반경 차이를 익혀 보세요.</p></section>
-    <section id="planner" class="planner" hidden>
-      <div class="places-panel">
-        <div class="panel-heading"><div><small id="region-caption">오키나와 본섬</small><h2 id="region-title">오키나와 본섬</h2></div><span class="badge priority">추천 지역</span></div>
-        <p id="scope-note" class="muted"></p>
-        <div class="filter-row"><label>장소 목록<select id="source-filter"><option value="document">추천 드라이브 장소</option><option value="all">본섬 전체 장소 찾기</option></select></label><label>종류<select id="kind-filter"><option value="all">전체</option><option value="stay">숙소</option><option value="food">식당</option><option value="sight">관광지</option><option value="shop">쇼핑·휴게소</option><option value="transport">공항·렌터카</option></select></label></div>
-        <div class="filter-row"><label class="search-label">장소 검색<input id="search" placeholder="숙소, 식당, 관광지 이름" type="search"></label><label>지역<select id="area-filter"><option value="all">본섬 전체</option><option value="south">남부 · 나하·난조</option><option value="central">중부 · 차탄·온나</option><option value="north">북부 · 나고·모토부</option></select></label></div>
-        <div class="carousel-heading"><p id="place-count" class="muted" aria-live="polite"></p><span>옆으로 넘겨 선택하세요</span></div><div class="carousel-shell"><button id="place-prev" class="carousel-arrow" aria-label="이전 장소">‹</button><div id="places" class="places" tabindex="0" aria-label="장소 선택 슬라이드"></div><button id="place-next" class="carousel-arrow" aria-label="다음 장소">›</button></div><p id="place-selection" class="place-selection" aria-live="polite"></p><button id="more" hidden>장소 더 불러오기</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>일본 드라이브 · 오키나와 운전 연습</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas id="scene" aria-label="오키나와 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
+    <div id="engine-error" role="alert"></div>
+    <header>
+      <a class="brand" href="/">JD <span>일본 드라이브</span></a>
+      <div class="header-right">
+        <span class="badge">테스트 0.6</span><button id="fullscreen">전체 화면</button
+        ><button id="help-open">조작 방법</button><button id="menu" hidden>목적지 변경</button>
       </div>
-      <aside class="trip-panel" hidden><canvas id="overview" width="440" height="350" aria-label="오키나와 지도"></canvas><div class="trip-details"><small>출발 준비</small><label>출발지<strong id="departure-name">출발지를 선택하세요</strong><select id="departure" class="sr-only" tabindex="-1" aria-hidden="true"></select></label><div class="trip-line">↓ <span>내비게이션을 따라 목적지 주차장으로</span></div><label>목적지<strong id="chosen">목적지를 선택하세요</strong></label><div id="drive-summary" class="drive-summary"></div><p id="trip-status" class="muted" aria-live="polite"></p><div id="route-preparation" hidden aria-label="드라이브 준비 진행 상황"><ol id="preparation-stages"><li>주차장 확인</li><li>경로 계산</li><li>주변 도로 준비</li></ol><div class="preparation-wait"><span class="spinner" aria-hidden="true"></span><span id="preparation-detail" role="status"></span><button id="prepare-cancel">취소</button></div></div><button id="start" class="primary" disabled>운전 시작</button><p class="fine">좌측통행을 지키고, 다른 차량과 간격을 유지하세요.<br>목적지에서는 정차 후 주차 브레이크까지 마무리하세요.</p><button id="quick-test" class="text-button">추천 코스로 변경 · 모토부 숙소 → 카이호우마루</button></div></aside>
+    </header>
+    <section id="splash" class="splash">
+      <div class="splash-atmosphere" aria-hidden="true"></div>
+      <div class="splash-content">
+        <span class="intro-location"><i></i> 오키나와 본섬</span>
+        <p class="eyebrow">처음 만나는 일본의 길</p>
+        <h1>
+          일본<span>드라이브<span class="title-dot">.</span></span>
+        </h1>
+        <p class="splash-tagline">내비게이션을 따라 달리고,<br />목적지 주차까지 직접 완성하세요.</p>
+        <div class="splash-menu">
+          <button id="play" class="play-button"><span>드라이브 시작</span><b aria-hidden="true">↗</b></button
+          ><button id="splash-help">조작 방법 <span aria-hidden="true">＋</span></button>
+        </div>
+        <p id="intro-status" class="fine" role="status">오키나와 지도를 불러오는 중…</p>
+      </div>
+      <div class="intro-map-panel">
+        <div class="intro-map-heading"><span>이번 드라이브의 무대</span><strong>오키나와 본섬</strong></div>
+        <canvas id="intro-map" aria-label="오키나와 본섬과 드라이브 목적지 지도"></canvas>
+        <div class="intro-map-note">
+          <span class="map-dot"></span> 숙소 · 식당 · 관광지 <span>남부에서 북부까지</span>
+        </div>
+      </div>
+      <div class="splash-bottom">
+        <span>좌측통행 <i>／</i> 우핸들 <i>／</i> 실제 지도 기반</span
+        ><span>출발부터 주차까지, 하나의 드라이브.</span>
+      </div>
     </section>
-    <section id="difficulty-panel" class="difficulty-panel" hidden><div id="difficulties" class="difficulties"></div><p class="fine">난이도가 높을수록 주변 도로의 차량이 늘어납니다. 가장 높은 난이도에서는 교차로와 차간 간격에 더 주의하세요.</p></section>
-    <nav class="wizard-controls" aria-label="선택 단계 이동"><button id="step-back">← 이전</button><p id="step-selection" aria-live="polite"></p><button id="step-next" class="primary">차량 선택 →</button></nav>
-    <div id="loading" role="status"></div><p class="fine bottom-note">실제 지도 위에서 익히는 일본 첫 운전. 교통 흐름과 신호 주기는 연습용으로 동작합니다. <button id="sources-open" class="text-button">지도·차량 자료와 재현 범위</button></p>
-  </main>
-  <aside id="nav" hidden><small id="driving-car">목적지</small><h2 id="destination"></h2><canvas id="map" width="260" height="180" aria-label="경로 안내 지도"></canvas><p id="instruction"></p><p id="distance"></p><p id="road-status" class="fine"></p><small>W 가속 · S 제동 · A/D 조향</small><button id="reset-position">출발 위치로 돌아가기</button></aside>
-  <div id="hint" hidden role="status"></div>
-  <div id="driving-status" hidden><div class="live-velocity"><strong id="live-speed">0</strong><small>km/h</small></div><div id="speed-limit"><span id="speed-limit-value">—</span><small id="speed-limit-note">표지 확인</small></div><div class="live-score">운전 점수 <strong id="live-score">100</strong></div></div>
-  <div id="violation-warning" hidden role="alert"></div><div id="camera-warning" hidden role="status"></div>
-  <div id="drive-toolbar" hidden><span id="gear-state">D 전진</span><div><button id="gear-forward" aria-pressed="true">D 전진</button><button id="gear-reverse" aria-pressed="false">R 후진</button><button id="nav-closer">내비 확대 M</button></div></div>
-  <div id="touch-controls" aria-label="터치 운전 조작" hidden><div class="touch-tools"><button data-action="gear">D / R</button><button data-action="brake">주차 B</button><button data-action="nav">내비 확대</button><button data-action="pause">일시정지</button></div><div class="touch-steer"><button data-key="KeyA" aria-label="왼쪽 조향">◀</button><button data-key="KeyD" aria-label="오른쪽 조향">▶</button></div><div class="touch-pedals"><button data-key="KeyS">제동</button><button data-key="KeyW">가속</button></div></div>
-  <footer id="hud" hidden><div><small>속도</small><strong id="speed">0</strong> <span>km/h</span></div><div><small>기어</small><strong id="gear">D</strong></div><div><small>남은 거리</small><strong id="remaining">—</strong></div><div class="keys">W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향<br>R 전후진 · C 후방 · P 일시정지 · M 지도 보기</div></footer>
-  <div id="result" hidden></div><a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 기여자 · 경로: OSRM</a>
-  <div id="help" class="game-dialog" hidden><div><small>조작 방법</small><h2>천천히, 왼쪽으로.</h2><p>W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향<br>R 전후진 전환 · B 주차 브레이크<br>Q / E 좌우 확인 · C 후방 확인<br>M 내비게이션 가까이 보기 · Esc 일시정지</p><p class="fine">운전대는 누른 시간에 따라 부드럽게 돌아갑니다.<br>주차할 때는 차체 전체를 주차면에 넣고 정차한 뒤 B를 누르세요.</p><button id="help-close" class="primary">확인</button></div></div>
-  <div id="pause-menu" class="game-dialog" hidden><div><small>일시정지</small><h2>잠시 쉬어가세요</h2><button id="resume" class="primary">계속 운전</button><button id="pause-reset">출발 위치로</button><button id="pause-title">타이틀로 돌아가기</button></div></div>
-  <div id="sources" class="game-dialog" hidden><div><small>지도와 차량 자료</small><h2>실제 자료를 바탕으로</h2><p class="fine">도로·건물 위치: OpenStreetMap. 테스트 구간 높이·주차선 참고: 국토지리원 표고·항공사진. 차량 크기: 토요타 공식 제원. 실내 배치와 색상: 첨부 사진·공식 사진.<br>건물 높이 일부는 층수 기반 추정이고, 외관과 실내 세부 치수는 단순화되어 있습니다. 주차면은 항공사진 판독값이며 현장 실측이 아닙니다. 지도 갱신 및 현장 차이가 있을 수 있습니다. 교통량·신호 주기는 실제 실시간 정보가 아닙니다.</p><p class="fine">제한속도는 지도에 등록된 값을 사용하며, 미확인 도로는 숫자를 추측하지 않고 ‘표지 확인’으로 표시합니다. 2026년 9월 생활도로 법정속도 변경을 참고했습니다. 단속카메라·일시정지 위치는 공개 지도 등록 지점이며 누락되거나 변경되었을 수 있습니다. 일부 카메라의 현재 운영 여부는 확인되지 않았습니다. 장비와 표지 모양·도로변 배치는 단순화했습니다. 이동식 단속 위치는 임의로 추가하지 않았습니다. 화면의 경고·감점은 게임의 연습 평가이며 실제 단속이나 벌점 판정이 아닙니다.</p><p><a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">일본 국토지리원</a> · <a href="https://global.toyota/en/prius20th/evolution/4th/" target="_blank" rel="noopener">프리우스</a> · <a href="https://toyota.jp/alphard/design/" target="_blank" rel="noopener">알파드</a> · <a href="https://www.hanasaki-marche.com/assets/img/data/floor-map.pdf" target="_blank" rel="noopener">주차장 배치도</a> · <a href="https://www.npa.go.jp/bureau/traffic/seikatsudouro/seikatsudoro.html" target="_blank" rel="noopener">일본 경찰청 속도 규정</a> · <a href="https://www.police.pref.okinawa.jp/kouan-docs/2022081900350/file_contents/R3090924.pdf" target="_blank" rel="noopener">오키나와 단속장비 운영</a></p><button id="sources-close" class="primary">돌아가기</button></div></div>
-  <output id="telemetry" class="sr-only" aria-live="off"></output>
-  <script type="module" src="game.js"></script>
-</body></html>
-
+    <main id="select" hidden>
+      <div class="intro">
+        <small id="step-caption">드라이브 준비 · 1 / 6</small>
+        <h1 id="step-title" tabindex="-1">어디로 떠날까요?</h1>
+        <p id="step-description">달리고 싶은 지역부터 골라 주세요.</p>
+        <button id="back-title">← 타이틀 화면</button>
+      </div>
+      <ol id="step-progress" class="step-progress" aria-label="드라이브 준비 단계"></ol>
+      <div id="regions" class="region-tabs"></div>
+      <section class="vehicle-section" hidden>
+        <div class="vehicle-heading"><small>함께 달릴 차량</small><span>일본 사양 · 우핸들</span></div>
+        <div id="vehicles" class="vehicles"></div>
+        <p class="fine">
+          프리우스로 가볍게, 알파드로 여유롭게. 두 차량의 크기와 회전 반경 차이를 익혀 보세요.
+        </p>
+      </section>
+      <section id="planner" class="planner" hidden>
+        <div class="places-panel">
+          <div class="panel-heading">
+            <div>
+              <small id="region-caption">오키나와 본섬</small>
+              <h2 id="region-title">오키나와 본섬</h2>
+            </div>
+            <span class="badge priority">추천 지역</span>
+          </div>
+          <p id="scope-note" class="muted"></p>
+          <div class="filter-row">
+            <label
+              >장소 목록<select id="source-filter">
+                <option value="document">추천 드라이브 장소</option>
+                <option value="all">본섬 전체 장소 찾기</option>
+              </select></label
+            ><label
+              >종류<select id="kind-filter">
+                <option value="all">전체</option>
+                <option value="stay">숙소</option>
+                <option value="food">식당</option>
+                <option value="sight">관광지</option>
+                <option value="shop">쇼핑·휴게소</option>
+                <option value="transport">공항·렌터카</option>
+              </select></label
+            >
+          </div>
+          <div class="filter-row">
+            <label class="search-label"
+              >장소 검색<input id="search" placeholder="숙소, 식당, 관광지 이름" type="search" /></label
+            ><label
+              >지역<select id="area-filter">
+                <option value="all">본섬 전체</option>
+                <option value="south">남부 · 나하·난조</option>
+                <option value="central">중부 · 차탄·온나</option>
+                <option value="north">북부 · 나고·모토부</option>
+              </select></label
+            >
+          </div>
+          <div class="carousel-heading">
+            <p id="place-count" class="muted" aria-live="polite"></p>
+            <span>옆으로 넘겨 선택하세요</span>
+          </div>
+          <div class="carousel-shell">
+            <button id="place-prev" class="carousel-arrow" aria-label="이전 장소">‹</button>
+            <div id="places" class="places" tabindex="0" aria-label="장소 선택 슬라이드"></div>
+            <button id="place-next" class="carousel-arrow" aria-label="다음 장소">›</button>
+          </div>
+          <p id="place-selection" class="place-selection" aria-live="polite"></p>
+          <button id="more" hidden>장소 더 불러오기</button>
+        </div>
+        <aside class="trip-panel" hidden>
+          <canvas id="overview" width="440" height="350" aria-label="오키나와 지도"></canvas>
+          <div class="trip-details">
+            <small>출발 준비</small
+            ><label
+              >출발지<strong id="departure-name">출발지를 선택하세요</strong
+              ><select id="departure" class="sr-only" tabindex="-1" aria-hidden="true"></select
+            ></label>
+            <div class="trip-line">↓ <span>내비게이션을 따라 목적지 주차장으로</span></div>
+            <label>목적지<strong id="chosen">목적지를 선택하세요</strong></label>
+            <div id="drive-summary" class="drive-summary"></div>
+            <p id="trip-status" class="muted" aria-live="polite"></p>
+            <div id="route-preparation" hidden aria-label="드라이브 준비 진행 상황">
+              <ol id="preparation-stages">
+                <li>주차장 확인</li>
+                <li>경로 계산</li>
+                <li>주변 도로 준비</li>
+              </ol>
+              <div class="preparation-wait">
+                <span class="spinner" aria-hidden="true"></span
+                ><span id="preparation-detail" role="status"></span><button id="prepare-cancel">취소</button>
+              </div>
+            </div>
+            <button id="start" class="primary" disabled>운전 시작</button>
+            <p class="fine">
+              좌측통행을 지키고, 다른 차량과 간격을 유지하세요.<br />목적지에서는 정차 후 주차 브레이크까지
+              마무리하세요.
+            </p>
+            <button id="quick-test" class="text-button">추천 코스로 변경 · 모토부 숙소 → 카이호우마루</button>
+          </div>
+        </aside>
+      </section>
+      <section id="difficulty-panel" class="difficulty-panel" hidden>
+        <div id="difficulties" class="difficulties"></div>
+        <p class="fine">
+          난이도가 높을수록 주변 도로의 차량이 늘어납니다. 가장 높은 난이도에서는 교차로와 차간 간격에 더
+          주의하세요.
+        </p>
+      </section>
+      <nav class="wizard-controls" aria-label="선택 단계 이동">
+        <button id="step-back">← 이전</button>
+        <p id="step-selection" aria-live="polite"></p>
+        <button id="step-next" class="primary">차량 선택 →</button>
+      </nav>
+      <div id="loading" role="status"></div>
+      <p class="fine bottom-note">
+        실제 지도 위에서 익히는 일본 첫 운전. 교통 흐름과 신호 주기는 연습용으로 동작합니다.
+        <button id="sources-open" class="text-button">지도·차량 자료와 재현 범위</button>
+      </p>
+    </main>
+    <aside id="nav" hidden>
+      <small id="driving-car">목적지</small>
+      <h2 id="destination"></h2>
+      <canvas id="map" width="260" height="180" aria-label="경로 안내 지도"></canvas>
+      <p id="instruction"></p>
+      <p id="distance"></p>
+      <p id="road-status" class="fine"></p>
+      <small>W 가속 · S 제동 · A/D 조향</small><button id="reset-position">출발 위치로 돌아가기</button>
+    </aside>
+    <div id="hint" hidden role="status"></div>
+    <div id="driving-status" hidden>
+      <div class="live-velocity"><strong id="live-speed">0</strong><small>km/h</small></div>
+      <div id="speed-limit">
+        <span id="speed-limit-value">—</span><small id="speed-limit-note">표지 확인</small>
+      </div>
+      <div class="live-score">운전 점수 <strong id="live-score">100</strong></div>
+    </div>
+    <div id="violation-warning" hidden role="alert"></div>
+    <div id="camera-warning" hidden role="status"></div>
+    <div id="drive-toolbar" hidden>
+      <span id="gear-state">D 전진</span>
+      <div>
+        <button id="gear-forward" aria-pressed="true">D 전진</button
+        ><button id="gear-reverse" aria-pressed="false">R 후진</button
+        ><button id="nav-closer">내비 확대 M</button>
+      </div>
+    </div>
+    <div id="touch-controls" aria-label="터치 운전 조작" hidden>
+      <div class="touch-tools">
+        <button data-action="gear">D / R</button><button data-action="brake">주차 B</button
+        ><button data-action="nav">내비 확대</button><button data-action="pause">일시정지</button>
+      </div>
+      <div class="touch-steer">
+        <button data-key="KeyA" aria-label="왼쪽 조향">◀</button
+        ><button data-key="KeyD" aria-label="오른쪽 조향">▶</button>
+      </div>
+      <div class="touch-pedals">
+        <button data-key="KeyS">제동</button><button data-key="KeyW">가속</button>
+      </div>
+    </div>
+    <footer id="hud" hidden>
+      <div><small>속도</small><strong id="speed">0</strong> <span>km/h</span></div>
+      <div><small>기어</small><strong id="gear">D</strong></div>
+      <div><small>남은 거리</small><strong id="remaining">—</strong></div>
+      <div class="keys">
+        W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향<br />R 전후진 · C 후방 · P 일시정지 · M 지도 보기
+      </div>
+    </footer>
+    <div id="result" hidden></div>
+    <a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
+      >© OpenStreetMap 기여자 · 경로: OSRM</a
+    >
+    <div id="help" class="game-dialog" hidden>
+      <div>
+        <small>조작 방법</small>
+        <h2>천천히, 왼쪽으로.</h2>
+        <p>
+          W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향<br />R 전후진 전환 · B 주차 브레이크<br />Q / E 좌우 확인 ·
+          C 후방 확인<br />M 내비게이션 가까이 보기 · Esc 일시정지
+        </p>
+        <p class="fine">
+          운전대는 누른 시간에 따라 부드럽게 돌아갑니다.<br />주차할 때는 차체 전체를 주차면에 넣고 정차한 뒤
+          B를 누르세요.
+        </p>
+        <button id="help-close" class="primary">확인</button>
+      </div>
+    </div>
+    <div id="pause-menu" class="game-dialog" hidden>
+      <div>
+        <small>일시정지</small>
+        <h2>잠시 쉬어가세요</h2>
+        <button id="resume" class="primary">계속 운전</button><button id="pause-reset">출발 위치로</button
+        ><button id="pause-title">타이틀로 돌아가기</button>
+      </div>
+    </div>
+    <div id="sources" class="game-dialog" hidden>
+      <div>
+        <small>지도와 차량 자료</small>
+        <h2>실제 자료를 바탕으로</h2>
+        <p class="fine">
+          도로·건물 위치: OpenStreetMap. 테스트 구간 높이·주차선 참고: 국토지리원 표고·항공사진. 차량 크기:
+          토요타 공식 제원. 실내 배치와 색상: 첨부 사진·공식 사진.<br />건물 높이 일부는 층수 기반 추정이고,
+          외관과 실내 세부 치수는 단순화되어 있습니다. 주차면은 항공사진 판독값이며 현장 실측이 아닙니다. 지도
+          갱신 및 현장 차이가 있을 수 있습니다. 교통량·신호 주기는 실제 실시간 정보가 아닙니다.
+        </p>
+        <p class="fine">
+          제한속도는 지도에 등록된 값을 사용하며, 미확인 도로는 숫자를 추측하지 않고 ‘표지 확인’으로
+          표시합니다. 2026년 9월 생활도로 법정속도 변경을 참고했습니다. 단속카메라·일시정지 위치는 공개 지도
+          등록 지점이며 누락되거나 변경되었을 수 있습니다. 일부 카메라의 현재 운영 여부는 확인되지 않았습니다.
+          장비와 표지 모양·도로변 배치는 단순화했습니다. 이동식 단속 위치는 임의로 추가하지 않았습니다. 화면의
+          경고·감점은 게임의 연습 평가이며 실제 단속이나 벌점 판정이 아닙니다.
+        </p>
+        <p>
+          <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener"
+            >일본 국토지리원</a
+          >
+          ·
+          <a href="https://global.toyota/en/prius20th/evolution/4th/" target="_blank" rel="noopener"
+            >프리우스</a
+          >
+          · <a href="https://toyota.jp/alphard/design/" target="_blank" rel="noopener">알파드</a> ·
+          <a
+            href="https://www.hanasaki-marche.com/assets/img/data/floor-map.pdf"
+            target="_blank"
+            rel="noopener"
+            >주차장 배치도</a
+          >
+          ·
+          <a
+            href="https://www.npa.go.jp/bureau/traffic/seikatsudouro/seikatsudoro.html"
+            target="_blank"
+            rel="noopener"
+            >일본 경찰청 속도 규정</a
+          >
+          ·
+          <a
+            href="https://www.police.pref.okinawa.jp/kouan-docs/2022081900350/file_contents/R3090924.pdf"
+            target="_blank"
+            rel="noopener"
+            >오키나와 단속장비 운영</a
+          >
+        </p>
+        <button id="sources-close" class="primary">돌아가기</button>
+      </div>
+    </div>
+    <output id="telemetry" class="sr-only" aria-live="off"></output>
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
