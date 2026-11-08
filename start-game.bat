@@ -7,7 +7,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Japan Drive: http://127.0.0.1:8000  (close this window to stop the game server)
-start "" http://127.0.0.1:8000
-node server.mjs
+rem The server picks a free port (8000 or the next one) and opens the browser there.
+node server.mjs --open
 pause
