@@ -1800,7 +1800,32 @@ $("#fullscreen").onclick = async () => {
 };
 
 let last = performance.now();
+// One unexpected error must never freeze the game: report it, keep running.
+let lastErrorNote = 0;
+function reportError(error) {
+  console.error(error);
+  const now = performance.now();
+  if (now - lastErrorNote < 10000) return;
+  lastErrorNote = now;
+  const note = $("#error-note");
+  note.textContent = "일시적인 오류가 발생했지만 게임은 계속됩니다. 화면이 이상하면 일시정지 메뉴에서 출발 위치로 돌아가세요.";
+  note.hidden = false;
+  setTimeout(() => (note.hidden = true), 6000);
+}
+window.addEventListener("error", (e) => reportError(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => {
+  if (e.reason?.name !== "AbortError") reportError(e.reason);
+});
 function frame(t) {
+  try {
+    frameBody(t);
+  } catch (error) {
+    last = t;
+    reportError(error);
+  }
+  requestAnimationFrame(frame);
+}
+function frameBody(t) {
   const dt = Math.min((t - last) / 1000, 0.05);
   last = t;
   const w = innerWidth,
@@ -1965,7 +1990,6 @@ function frame(t) {
       traffic: traffic?.cars || [],
     });
   }
-  requestAnimationFrame(frame);
 }
 new ResizeObserver(() => {
   if (!$("#select").hidden && wizardStep === 6) drawOverview();

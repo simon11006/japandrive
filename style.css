@@ -3059,3 +3059,18 @@ body.on-title header {
   .title-menu .menu-item { font-size: 16px; padding: 9px 14px; }
   .press-start span { font-size: 20px; letter-spacing: 4px; }
 }
+
+#error-note {
+  position: fixed;
+  left: 50%;
+  top: 70px;
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(640px, 92vw);
+  padding: 10px 16px;
+  background: #3b2a12ee;
+  border: 1px solid #f2c14e;
+  border-radius: 8px;
+  color: #ffeec6;
+  font-size: 14px;
+}

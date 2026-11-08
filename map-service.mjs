@@ -29,6 +29,31 @@ export function coreGeometry(data) {
     ),
   };
 }
+// Run at most `n` tasks at once; the rest wait their turn. Public map
+// servers allow only a couple of simultaneous requests per address.
+export function limiter(n) {
+  let active = 0;
+  const waiting = [];
+  const next = () => {
+    if (active >= n || !waiting.length) return;
+    active++;
+    const { task, resolve, reject } = waiting.shift();
+    task()
+      .then(resolve, reject)
+      .finally(() => {
+        active--;
+        next();
+      });
+  };
+  return (task) =>
+    new Promise((resolve, reject) => {
+      waiting.push({ task, resolve, reject });
+      next();
+    });
+}
+export const ROAD_FILTER =
+  '[highway~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"]';
+export const boxKey = (b) => b.map((v) => Number(v).toFixed(6)).join(",");
 export function queryBounds(query) {
   const around = query.match(/way\(around:([\d.]+),([\d.-]+),([\d.-]+)\)/);
   if (around) {
@@ -84,11 +109,23 @@ export function selectMapQuery(data, query) {
   };
 }
 export function createMapService({ fetcher = fetch, cacheDir = resolve("data/service-cache") } = {}) {
+  // Recent responses stay in memory (bounded); everything is also on disk.
   const memory = new Map(),
-    pending = new Map();
+    pending = new Map(),
+    remember = (key, data) => {
+      memory.delete(key);
+      memory.set(key, data);
+      while (memory.size > 400) memory.delete(memory.keys().next().value);
+    },
+    mapSlots = limiter(2),
+    routeSlots = limiter(4);
   async function saved(key, request, signal) {
     signal?.throwIfAborted();
-    if (memory.has(key)) return memory.get(key);
+    if (memory.has(key)) {
+      const hit = memory.get(key);
+      remember(key, hit);
+      return hit;
+    }
     let entry = pending.get(key);
     if (entry?.controller.signal.aborted) entry = null;
     if (!entry) {
@@ -99,14 +136,14 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
         try {
           const prior = JSON.parse(await readFile(path, "utf8"));
           if (prior.schema === 1) {
-            memory.set(key, prior.data);
+            remember(key, prior.data);
             return prior.data;
           }
         } catch {}
         current.controller.signal.throwIfAborted();
         const data = await request(current.controller.signal);
         current.controller.signal.throwIfAborted();
-        memory.set(key, data);
+        remember(key, data);
         // A read-only/full cache folder must not discard a valid map response.
         try {
           await mkdir(cacheDir, { recursive: true });
@@ -146,7 +183,20 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
       if (signal?.aborted) abort();
     });
   }
-  async function fetchJson(url, signal, timeout = 12000) {
+  // Busy public servers answer 429/503/504; wait briefly and try once more.
+  async function fetchJson(url, signal, timeout = 12000, slots = mapSlots) {
+    return slots(async () => {
+      try {
+        return await fetchOnce(url, signal, timeout);
+      } catch (error) {
+        if (signal?.aborted || !/ (429|502|503|504)$/.test(error.message)) throw error;
+        await new Promise((r) => setTimeout(r, 2000));
+        signal?.throwIfAborted();
+        return fetchOnce(url, signal, timeout);
+      }
+    });
+  }
+  async function fetchOnce(url, signal, timeout) {
     const r = await fetcher(url, {
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
       headers: {
@@ -169,9 +219,11 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   ];
   async function overpass(query, signal) {
-    return saved(
-      "overpass:" + query,
-      async (shared) => {
+    return saved("overpass:" + query, (shared) => overpassRaw(query, shared), signal);
+  }
+  async function overpassRaw(query, shared) {
+    {
+      {
         let last;
         for (const base of OVERPASS) {
           try {
@@ -185,9 +237,8 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
           }
         }
         throw last;
-      },
-      signal,
-    );
+      }
+    }
   }
   async function osmBox(b, signal, depth = 0) {
     const bbox = [b[1], b[0], b[3], b[2]].map((v) => v.toFixed(7)).join(",");
@@ -210,11 +261,41 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
       return out;
     }
   }
+  // Roads are cached one map tile at a time, so a tile fetched for one player
+  // (or by scripts/build-offline-pack.mjs) serves every later player.
+  async function roadTile(b, signal) {
+    const key = "roads:" + boxKey(b);
+    return saved(
+      key,
+      async (shared) => {
+        const query = `[out:json][timeout:45];way(${boxKey(b)})${ROAD_FILTER};out geom;`;
+        try {
+          return await overpassRaw(query, shared);
+        } catch (error) {
+          if (shared.aborted) throw error;
+        }
+        const results = [];
+        const step = 0.009;
+        for (let lat = b[0]; lat < b[2] - 1e-9; lat += step)
+          for (let lon = b[1]; lon < b[3] - 1e-9; lon += step)
+            results.push(
+              ...(await osmBox([lat, lon, Math.min(b[2], lat + step), Math.min(b[3], lon + step)], shared)),
+            );
+        return selectMapQuery(merge(results), "[highway~");
+      },
+      signal,
+    );
+  }
+  const merge = (results) => ({
+    elements: [...new Map(results.flatMap((d) => d.elements).map((e) => [e.type + "/" + e.id, e])).values()],
+  });
   async function mapQuery(query, signal) {
     const bounds = queryBounds(query);
     if (!bounds.length) throw new Error("지원하지 않는 지도 조회입니다.");
     for (const b of bounds)
       if ((b[2] - b[0]) * (b[3] - b[1]) > 0.0025) throw new Error("지도 조회 범위가 너무 넓습니다.");
+    if (query.includes("[highway~"))
+      return selectMapQuery(merge(await Promise.all(bounds.map((b) => roadTile(b, signal)))), query);
     try {
       return selectMapQuery(await overpass(query, signal), query);
     } catch (error) {
@@ -223,20 +304,12 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
     const results = [];
     for (const b of bounds) {
       signal?.throwIfAborted();
-      // About 1 km cells keep each general-API request well under its limits.
       const step = 0.009;
       for (let lat = b[0]; lat < b[2] - 1e-9; lat += step)
         for (let lon = b[1]; lon < b[3] - 1e-9; lon += step)
           results.push(...(await osmBox([lat, lon, Math.min(b[2], lat + step), Math.min(b[3], lon + step)], signal)));
     }
-    return selectMapQuery(
-      {
-        elements: [
-          ...new Map(results.flatMap((d) => d.elements).map((e) => [e.type + "/" + e.id, e])).values(),
-        ],
-      },
-      query,
-    );
+    return selectMapQuery(merge(results), query);
   }
   async function route(start, end, signal) {
     const tail = `route/v1/driving/${start};${end}?overview=full&geometries=geojson&steps=true`,
@@ -251,7 +324,7 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
         ]) {
           try {
             sharedSignal.throwIfAborted();
-            const data = await fetchJson(base + tail, sharedSignal, 12000);
+            const data = await fetchJson(base + tail, sharedSignal, 12000, routeSlots);
             if (data.code !== "Ok") throw new Error("자동차 경로가 없습니다.");
             return { ...data, provider: base };
           } catch (e) {
@@ -266,5 +339,5 @@ export function createMapService({ fetcher = fetch, cacheDir = resolve("data/ser
       signal,
     );
   }
-  return { mapQuery, route, fetchJson };
+  return { mapQuery, route, fetchJson, roadTile };
 }

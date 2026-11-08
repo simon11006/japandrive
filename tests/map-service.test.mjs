@@ -74,11 +74,12 @@ test("route service falls back to another real provider and reuses the saved rou
     cacheDir,
     fetcher: async (url) => {
       calls.push(String(url));
-      return calls.length === 1 ? { ok: false, status: 503 } : ok(route);
+      // The first provider stays busy (it is retried once), so the second answers.
+      return String(url).includes("openstreetmap.de") ? { ok: false, status: 503 } : ok(route);
     },
   });
   const first = await one.route("127,26", "127.01,26.01");
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(first.provider, /router.project-osrm.org/);
   const two = createMapService({
     cacheDir,
@@ -187,4 +188,46 @@ test("road lookups use Overpass first and fall back to small general-API boxes i
   const fallback = await service.mapQuery(query);
   assert.deepEqual(fallback.elements.map((e) => e.id), [7]);
   assert.ok(boxes.some((a) => a <= 0.00003), "dense boxes were split");
+});
+
+test("road tiles are cached one tile at a time and shared between different combined queries", async (t) => {
+  const dir = await folder(t);
+  const calls = [];
+  const road = (id, lat) => ({ type: "way", id, tags: { highway: "residential" }, geometry: [{ lat, lon: 127.6 }, { lat: lat + 0.001, lon: 127.601 }] });
+  const service = createMapService({
+    cacheDir: dir,
+    fetcher: async (url) => {
+      calls.push(String(url));
+      const box = decodeURIComponent(String(url)).match(/way\(([\d.,-]+)\)/)[1].split(",").map(Number);
+      return ok({ elements: [road(Math.round(box[0] * 1000), box[0] + 0.001)] });
+    },
+  });
+  const A = "26.200000,127.590000,26.210000,127.610000",
+    B = "26.210000,127.590000,26.220000,127.610000",
+    C = "26.220000,127.590000,26.230000,127.610000";
+  const q = (...boxes) => `[out:json][timeout:45];(${boxes.map((b) => `way(${b})[highway~"^(residential)$"];`).join("")});out geom;`;
+  assert.equal((await service.mapQuery(q(A, B))).elements.length, 2);
+  assert.equal(calls.length, 2);
+  // A different combination reuses A and B and fetches only C.
+  assert.equal((await service.mapQuery(q(B, C, A))).elements.length, 3);
+  assert.equal(calls.length, 3);
+});
+
+test("at most two map requests go upstream at once, however many players ask", async (t) => {
+  const dir = await folder(t);
+  let active = 0,
+    peak = 0;
+  const service = createMapService({
+    cacheDir: dir,
+    fetcher: async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 20));
+      active--;
+      return ok({ elements: [] });
+    },
+  });
+  const boxes = Array.from({ length: 12 }, (_, i) => `26.${String(200 + i * 10).padStart(3, "0")}000,127.590000,26.${String(209 + i * 10).padStart(3, "0")}000,127.600000`);
+  await Promise.all(boxes.map((b) => service.mapQuery(`[out:json];(way(${b})[highway~"^(residential)$"];);out geom;`)));
+  assert.ok(peak <= 2, `peak ${peak}`);
 });

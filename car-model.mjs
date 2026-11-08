@@ -97,7 +97,9 @@ function loft(rings, zs, material) {
         b = i * n + ((j + 1) % n),
         c = (i + 1) * n + j,
         d = (i + 1) * n + ((j + 1) % n);
-      index.push(a, c, b, b, c, d);
+      // Rings run anticlockwise seen from +z and stations advance along +z,
+      // so (a, b, c) / (b, d, c) face outward.
+      index.push(a, b, c, b, d, c);
     }
   for (const [i, flip] of [
     [0, true],
@@ -109,6 +111,7 @@ function loft(rings, zs, material) {
     for (let j = 0; j < n; j++) {
       const a = i * n + j,
         b = i * n + ((j + 1) % n);
+      // Front cap faces -z, rear cap +z.
       flip ? index.push(centre, b, a) : index.push(centre, a, b);
     }
   }
@@ -207,9 +210,11 @@ export function makeCarModel(id = "prius", paint) {
     ),
   );
   // Black lower cladding band to read the arches and sills.
-  const cladding = sections.map((s) =>
-    ring(0, s.sill + 0.05, s.half + 0.004, 0.055, 28, 6),
-  );
+  // Kept below the beltline so it never wraps over the bonnet at the arches.
+  const cladding = sections.map((s) => {
+    const room = s.belt - s.sill;
+    return ring(0, s.sill + Math.min(0.05, room * 0.25), s.half + 0.004, Math.min(0.055, room * 0.25), 28, 6);
+  });
   group.add(loft(cladding, zs, trim));
   // Glasshouse (tinted glass) and a painted roof skin over it.
   const cabin = sections.filter((s) => s.roof != null);
@@ -261,13 +266,13 @@ export function makeCarModel(id = "prius", paint) {
     }
     for (const side of [-1, 1]) {
       lamp(group, [0.36, 0.08, 0.05], [side * 0.62, 0.98, front + 0.08], "#f4f6ff", "#e8f0ff", 0.9);
-      lamp(group, [0.08, 0.5, 0.05], [side * 0.86, 1.25, rear - 0.02], "#5a0c10", "#ff2a22", 0.5);
+      lamp(group, [0.08, 0.5, 0.05], [side * 0.7, 1.15, rear - 0.01], "#5a0c10", "#ff2a22", 0.5);
     }
   } else {
     // Prius "hammerhead" thin full-width daytime light and rear light bar.
-    lamp(group, [1.4, 0.025, 0.04], [0, 0.66, front + 0.075], "#f6f8ff", "#eef4ff", 1.2);
+    lamp(group, [1.2, 0.025, 0.04], [0, 0.56, front + 0.02], "#f6f8ff", "#eef4ff", 1.2);
     for (const side of [-1, 1]) lamp(group, [0.28, 0.06, 0.04], [side * 0.62, 0.6, front + 0.1], "#dfe6ee", "#cfe0ff", 0.4);
-    lamp(group, [1.5, 0.035, 0.04], [0, 0.9, rear - 0.01], "#5a0c10", "#ff2a22", 0.6);
+    lamp(group, [1.2, 0.035, 0.04], [0, 0.8, rear + 0.005], "#5a0c10", "#ff2a22", 0.6);
     const intake = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.16, 0.05), trim);
     intake.position.set(0, 0.36, front + 0.04);
     group.add(intake);

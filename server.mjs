@@ -8,6 +8,18 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const cache = new Map();
 const maps = createMapService({ cacheDir: resolve(root, "data/service-cache") });
 let queue = Promise.resolve();
+// Bundled snapshots are read from disk once, not on every request.
+const snapshots = new Map();
+const snapshot = (name) => {
+  if (!snapshots.has(name))
+    snapshots.set(
+      name,
+      readFile(new URL(`./data/${name}`, import.meta.url), "utf8")
+        .then(JSON.parse)
+        .catch(() => null),
+    );
+  return snapshots.get(name);
+};
 const types = {
   ".html": "text/html",
   ".css": "text/css",
@@ -63,18 +75,14 @@ export const createRequestHandler =
         const query = url.searchParams.get("data");
         if (!query || query.length > 12000 || !query.startsWith("[out:json]"))
           throw new Error("잘못된 지도 요청입니다.");
-        const preview = await readFile(new URL("./data/preview-cache.json", import.meta.url), "utf8")
-          .then(JSON.parse)
-          .catch(() => null);
+        const preview = await snapshot("preview-cache.json");
         if (preview?.query === query) {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify(preview.roads));
           return;
         }
         if (query.includes("[highway~")) {
-          const secondary = await readFile(new URL("./data/signal-roads.json", import.meta.url), "utf8")
-            .then(JSON.parse)
-            .catch(() => null);
+          const secondary = await snapshot("signal-roads.json");
           const boxes = (q) =>
             [...q.matchAll(/way\(([\d.,-]+)\)/g)].map((m) =>
               m[1]
@@ -98,12 +106,20 @@ export const createRequestHandler =
         }
         const upstream = new URL("https://overpass-api.de/api/interpreter");
         upstream.searchParams.set("data", query);
-        const pending = queue.then(() => {
-          requestAbort.signal.throwIfAborted();
-          return request(upstream, 28000, requestAbort.signal);
-        });
-        queue = pending.catch(() => {});
-        const data = await pending;
+        // Road and parking lookups are handled by the map service, which
+        // caches per tile and limits its own upstream requests, so players
+        // never wait in one shared line. Other queries stay serialised.
+        const handled = /\[(?:highway~|amenity=parking)/.test(query);
+        let data;
+        if (handled) data = await request(upstream, 28000, requestAbort.signal);
+        else {
+          const pending = queue.then(() => {
+            requestAbort.signal.throwIfAborted();
+            return request(upstream, 28000, requestAbort.signal);
+          });
+          queue = pending.catch(() => {});
+          data = await pending;
+        }
         if (res.destroyed) return;
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify(data));
@@ -123,9 +139,7 @@ export const createRequestHandler =
           /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(value || "") &&
           value.split(",").every((x) => Number.isFinite(Number(x)));
         if (!valid(start) || !valid(end)) throw new Error("출발지와 목적지 좌표를 확인해 주세요.");
-        const training = await readFile(new URL("./data/training-routes.json", import.meta.url), "utf8")
-          .then(JSON.parse)
-          .catch(() => null);
+        const training = await snapshot("training-routes.json");
         const same = (s, coords) => s.split(",").every((v, i) => Math.abs(Number(v) - coords[i]) < 1e-7);
         const saved = training?.routes.find((r) => same(start, r.start) && same(end, r.end));
         if (saved) {
@@ -133,9 +147,7 @@ export const createRequestHandler =
           res.end(JSON.stringify(saved.data));
           return;
         }
-        const preview = await readFile(new URL("./data/preview-cache.json", import.meta.url), "utf8")
-          .then(JSON.parse)
-          .catch(() => null);
+        const preview = await snapshot("preview-cache.json");
         if (preview?.start === start && preview?.end === end) {
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify(preview.route));

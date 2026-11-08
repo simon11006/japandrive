@@ -259,6 +259,8 @@ export class DriveRenderer {
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.quality = 2;
+    this.mirrorEvery = 3;
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -418,6 +420,33 @@ export class DriveRenderer {
     ocean.position.y = -0.45;
     this.scene.add(ocean);
     this.ocean = ocean;
+  }
+  // Automatic quality: shared classroom PCs vary widely, so when frames take
+  // too long the renderer steps down instead of stuttering.
+  // 2 = full, 1 = medium, 0 = low.
+  setQuality(level) {
+    this.quality = Math.max(0, Math.min(2, level));
+    const ratio = [0.75, 1, Math.min(devicePixelRatio, 1.5)][this.quality],
+      shadow = [512, 1024, 2048][this.quality];
+    this.renderer.setPixelRatio(ratio);
+    this.renderer.setSize(innerWidth, innerHeight);
+    this.sun.shadow.mapSize.set(shadow, shadow);
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
+    this.mirrorEvery = [6, 4, 3][this.quality];
+  }
+  adaptQuality() {
+    const now = performance.now(),
+      dt = now - (this.lastRenderAt ?? now);
+    this.lastRenderAt = now;
+    if (dt <= 0 || dt > 400) return;
+    this.frameMs = (this.frameMs ?? 16) * 0.95 + dt * 0.05;
+    this.qualityTimer = (this.qualityTimer || 0) + dt;
+    if (this.qualityTimer > 3000 && this.frameMs > 36 && this.quality > 0) {
+      this.setQuality(this.quality - 1);
+      this.qualityTimer = 0;
+      this.frameMs = 20;
+    }
   }
   setView(settings) {
     this.view = viewSettings(settings);
@@ -1159,6 +1188,7 @@ export class DriveRenderer {
     }
   }
   render(state) {
+    this.adaptQuality();
     const w = innerWidth,
       h = innerHeight;
     if (this.width !== w || this.height !== h) {
@@ -1264,7 +1294,7 @@ export class DriveRenderer {
       this.reverseGuidesGroup.visible = false;
       this.navigation.material.map = this.reverseTarget.texture;
     } else this.navigation.material.map = this.nav.texture;
-    if (this.frame++ % 3 === 0) {
+    if (this.frame++ % this.mirrorEvery === 0) {
       this.interior.visible = false;
       this.externalCar.position.copy(this.rig.position);
       this.externalCar.rotation.copy(this.rig.rotation);
