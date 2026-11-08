@@ -204,3 +204,103 @@ test("all three traffic levels are populated on the real Motobu network without 
         assert.equal(rectanglesOverlap(sim.cars[i], sim.cars[i], sim.cars[j], sim.cars[j]), false);
   }
 });
+
+test("traffic never drives into the player's car and waits behind it", () => {
+  const roads = [
+    { id: "a", tags: { highway: "primary", oneway: "yes", width: "7" }, points: [{ x: 0, y: 0 }, { x: 0, y: -300 }] },
+  ];
+  const sim = new TrafficSimulation(roads, [], { x: 0, y: 200 }, 1);
+  const car = sim.cars[0];
+  // Park the player right in the AI car's lane, 9 m ahead.
+  const f = forward(car.heading);
+  const player = { x: car.x + f.x * 9, y: car.y + f.y * 9, heading: car.heading, speed: 0, length: 4.6, width: 1.78 };
+  for (let i = 0; i < 600; i++) sim.tick(1 / 60, i / 60, player);
+  assert.equal(rectanglesOverlap(car, car, player, player), false);
+  assert.ok(car.speed < 0.1, "the AI car is waiting");
+});
+
+test("traffic turns at junctions instead of always going straight, and U-turns at dead ends", () => {
+  const roads = [
+    { id: "main", tags: { highway: "primary", width: "7" }, points: [{ x: 0, y: 0 }, { x: 0, y: -80 }, { x: 0, y: -160 }] },
+    { id: "side", tags: { highway: "primary", width: "7" }, points: [{ x: 0, y: -80 }, { x: 80, y: -80 }] },
+  ];
+  const sim = new TrafficSimulation(roads, [], { x: 0, y: 40 }, 1);
+  const junction = sim.graph.edges.find((e) => e.to.y === -80 && e.from.y === 0);
+  const picks = new Set();
+  for (let id = 0; id < 40; id++) picks.add(sim.chooseNext({ id }, junction).roadId);
+  assert.deepEqual([...picks].sort(), ["main", "side"]);
+  const deadEnd = sim.graph.edges.find((e) => e.roadId === "side" && e.to.x === 80);
+  assert.equal(sim.chooseNext({ id: 1 }, deadEnd).to.x, 0, "turns back at the end of the road");
+});
+
+test("a car already past the stop line on yellow clears the junction instead of stopping inside it", () => {
+  const roads = [
+    { id: "a", tags: { highway: "primary", oneway: "yes", width: "7" }, points: [{ x: 0, y: 0 }, { x: 0, y: -300 }] },
+  ];
+  const signal = { id: 7, x: 0, y: -100, axis: 0 };
+  const sim = new TrafficSimulation(roads, [signal], { x: 0, y: 200 }, 1);
+  const car = sim.cars[0];
+  car.edge = sim.graph.edges[0];
+  car.along = 97; // 3 m before the signal, beyond its stop line
+  car.speed = 10;
+  sim.place(car);
+  let t = 0;
+  while (signalPhase(signal, car.heading, t) !== "yellow") t += 0.25;
+  sim.tick(0.1, t, { x: 999, y: 999 });
+  assert.ok(car.speed > 9, "keeps going through the junction");
+});
+
+test("an automatic hybrid creeps in D, holds still on the brake, and reverses slowly", async () => {
+  const { CREEP_SPEED, REVERSE_LIMIT } = await import("../vehicles.mjs");
+  for (const car of VEHICLES) {
+    let s = { x: 0, y: 0, heading: 0, speed: 0, steer: 0, gear: 1 };
+    for (let i = 0; i < 600; i++) s = integrateVehicle(s, { creep: true }, car, 1 / 60);
+    assert.ok(Math.abs(s.speed - CREEP_SPEED) < 0.15, `creeps at ${s.speed}`);
+    let held = { ...s, speed: 0 };
+    for (let i = 0; i < 300; i++) held = integrateVehicle(held, { creep: true, brake: 0.3 }, car, 1 / 60);
+    assert.equal(held.speed, 0, "light brake pressure holds the car");
+    let r = { x: 0, y: 0, heading: 0, speed: 0, steer: 0, gear: -1 };
+    for (let i = 0; i < 1200; i++) r = integrateVehicle(r, { gas: 1 }, car, 1 / 60);
+    assert.ok(r.speed <= REVERSE_LIMIT + 1e-9 && r.y > 0);
+    // Forward acceleration fades with speed but the car can reach expressway speed.
+    let f = { x: 0, y: 0, heading: 0, speed: 0, steer: 0, gear: 1 };
+    let t60 = null;
+    for (let i = 0; i < 60 * 60; i++) {
+      f = integrateVehicle(f, { gas: 1 }, car, 1 / 60);
+      if (t60 == null && f.speed * 3.6 >= 60) t60 = i / 60;
+    }
+    assert.ok(t60 > 5 && t60 < 12, `0-60 km/h in ${t60}s`);
+    assert.ok(f.speed * 3.6 > 100);
+  }
+});
+
+test("a short brake tap slows gently; a firm press stops hard", () => {
+  const car = VEHICLES[0];
+  const light = integrateVehicle({ x: 0, y: 0, heading: 0, speed: 14, steer: 0, gear: 1 }, { brake: 0.3 }, car, 1);
+  const firm = integrateVehicle({ x: 0, y: 0, heading: 0, speed: 14, steer: 0, gear: 1 }, { brake: 1 }, car, 1);
+  assert.ok(14 - light.speed < 3.5 && 14 - firm.speed > 7);
+});
+
+test("stop signs apply only to the traffic that faces them", async () => {
+  const { stopSignApplies } = await import("../driving-rules.mjs");
+  const way = 0;
+  assert.equal(stopSignApplies({ direction: "forward" }, 0, way), true);
+  assert.equal(stopSignApplies({ direction: "forward" }, Math.PI, way), false);
+  assert.equal(stopSignApplies({ direction: "backward" }, Math.PI, way), true);
+  assert.equal(stopSignApplies({}, Math.PI / 2, way), false, "crossing traffic is not bound by the sign");
+  assert.equal(stopSignApplies({}, Math.PI, way), true);
+});
+
+test("turn signal duty follows real turns, and contact fault depends on who moved into whom", async () => {
+  const { turnSide, playerAtFault } = await import("../driving-rules.mjs");
+  assert.equal(turnSide({ type: "turn", modifier: "left" }), -1);
+  assert.equal(turnSide({ type: "turn", modifier: "sharp right" }), 1);
+  assert.equal(turnSide({ type: "turn", modifier: "slight left" }), 0);
+  assert.equal(turnSide({ type: "new name", modifier: "left" }), 0);
+  assert.equal(turnSide({ type: "end of road", modifier: "right" }), 1);
+  const player = { x: 0, y: 0, heading: 0, speed: 3 };
+  assert.equal(playerAtFault(player, { x: 0, y: -5 }, 1), true, "drove forward into a car ahead");
+  assert.equal(playerAtFault(player, { x: 0, y: 5 }, 1), false, "hit from behind");
+  assert.equal(playerAtFault(player, { x: 0, y: 5 }, -1), true, "reversed into a car");
+  assert.equal(playerAtFault({ ...player, speed: 0 }, { x: 0, y: -5 }, 1), false, "stationary");
+});

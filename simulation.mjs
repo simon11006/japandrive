@@ -249,37 +249,79 @@ export class TrafficSimulation {
     car.y = e.from.y + (e.to.y - e.from.y) * t - Math.sin(e.heading) * offset;
     car.heading = e.heading;
   }
+  // Pick the edge after `edge`: mostly straight on, sometimes a turn, never an
+  // immediate U-turn unless the road ends. Deterministic per car and edge.
+  chooseNext(car, edge) {
+    const options = edge.to.out.filter((e) => e.to.key !== edge.from.key);
+    if (!options.length) return edge.to.out.find((e) => e.to.key === edge.from.key) || null;
+    if (options.length === 1) return options[0];
+    const weighted = options.map((e) => {
+      const turn = Math.abs(wrapAngle(e.heading - edge.heading));
+      return { e, w: turn < 0.45 ? 5 : turn < 2.2 ? 1.6 : 0.2 };
+    });
+    let pick = (hash(car.id + ":" + edge.id + ":" + this.serial) % 1000) / 1000;
+    const total = weighted.reduce((n, o) => n + o.w, 0);
+    for (const o of weighted) {
+      pick -= o.w / total;
+      if (pick <= 0) return o.e;
+    }
+    return weighted.at(-1).e;
+  }
   tick(dt, time, player) {
+    const bodies = [...this.cars, player];
     for (const car of this.cars) {
       let target = car.desired;
       const f = forward(car.heading);
-      for (const other of [...this.cars, player]) {
+      for (const other of bodies) {
         if (other === car) continue;
         const dx = other.x - car.x,
           dy = other.y - car.y,
           ahead = dx * f.x + dy * f.y,
           lateral = Math.abs(dx * f.y - dy * f.x);
-        if (ahead > 0 && ahead < 22 && lateral < 1.6) target = Math.min(target, Math.max(0, (ahead - 6) / 2));
+        // Keep a 2-second gap, never closer than about 6 m between centres.
+        if (ahead > 0 && ahead < 30 && lateral < 2.1)
+          target = Math.min(target, Math.max(0, (ahead - 6.5) / 2));
+      }
+      // Slow for the coming turn: about 15 km/h for a right angle.
+      car.next ??= this.chooseNext(car, car.edge);
+      const toEnd = car.edge.length - car.along;
+      if (car.next && toEnd < 25) {
+        const turn = Math.abs(wrapAngle(car.next.heading - car.edge.heading));
+        if (turn > 0.35) target = Math.min(target, Math.max(3.6, 9 - turn * 3.4) + toEnd * 0.25);
       }
       for (const s of this.signals) {
         const dx = s.x - car.x,
           dy = s.y - car.y,
           ahead = dx * f.x + dy * f.y,
-          lateral = Math.abs(dx * f.y - dy * f.x);
-        if (ahead > 0 && ahead < 35 && lateral < 7 && signalPhase(s, car.heading, time) !== "green")
-          target = Math.min(target, Math.sqrt(2 * 2 * Math.max(0, ahead - 7)));
+          lateral = Math.abs(dx * f.y - dy * f.x),
+          // The stop line is drawn 5 m before the mapped signal point.
+          toLine = ahead - 5 - car.length / 2;
+        if (ahead <= 0 || ahead > 45 || lateral > 7 || toLine < -0.5) continue;
+        const phase = signalPhase(s, car.heading, time);
+        if (phase === "green") continue;
+        // Yellow: stop only if a comfortable stop (≤3.5 m/s²) is still possible.
+        if (phase === "yellow" && car.speed ** 2 / (2 * Math.max(0.1, toLine)) > 3.5) continue;
+        target = Math.min(target, Math.sqrt(2 * 2.5 * Math.max(0, toLine - 0.5)));
       }
       car.braking = target < car.speed - 0.2;
-      car.speed += Math.max(-4 * dt, Math.min(1.3 * dt, target - car.speed));
+      const speed = Math.max(0, car.speed + Math.max(-4.5 * dt, Math.min(1.4 * dt, target - car.speed)));
+      // Never advance into another body (including the player's car).
+      const probe = { ...car, x: car.x + f.x * speed * dt * 4, y: car.y + f.y * speed * dt * 4 };
+      const hits = bodies.filter(
+        (other) => other !== car && other.length && rectanglesOverlap(probe, car, other, other),
+      );
+      // Two AI cars nosed into each other at a junction would wait forever;
+      // after 6 s the AI-only standoff is released. The player is never ignored.
+      car.blockedFor = hits.length ? (car.blockedFor || 0) + dt : 0;
+      const blocked = hits.includes(player) || (hits.length > 0 && car.blockedFor < 6);
+      car.speed = blocked ? 0 : speed;
+      if (blocked) car.braking = true;
       car.along += car.speed * dt;
       let guard = 0;
       while (car.along > car.edge.length && guard++ < 8) {
         car.along -= car.edge.length;
-        const options = car.edge.to.out.filter((e) => e.to.key !== car.edge.from.key);
-        const next = options.sort(
-          (a, b) =>
-            Math.abs(wrapAngle(a.heading - car.heading)) - Math.abs(wrapAngle(b.heading - car.heading)),
-        )[0];
+        const next = car.next ?? this.chooseNext(car, car.edge);
+        car.next = null;
         if (!next) {
           car.along = car.edge.length - 0.1;
           car.speed = 0;
@@ -287,7 +329,11 @@ export class TrafficSimulation {
         }
         car.edge = next;
       }
+      const previous = car.heading;
       this.place(car);
+      // Bodies swing through the corner instead of snapping to the new edge.
+      car.heading = previous + wrapAngle(car.heading - previous) * Math.min(1, (car.speed * dt) / 2.2 + 0.02);
     }
+    this.serial++;
   }
 }

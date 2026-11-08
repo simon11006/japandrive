@@ -910,10 +910,12 @@ export class DriveRenderer {
     this.renderer.render(this.mirrorOverlay, this.overlayCamera);
     this.renderer.autoClear = true;
   }
-  updateDisplays({ speed, gear, steer, navInfo, drawNavigation, parkingBrake, signal, time }) {
+  updateDisplays({ speed, gear, steer, navInfo, drawNavigation, parkingBrake, signal, time, blinker, blinkerLit }) {
     this.steeringWheel.rotation.z = -steer * 12;
-    if (time - this.lastNav < 0.1) return;
+    const blinkState = blinker && blinkerLit ? blinker : 0;
+    if (time - this.lastNav < 0.1 && blinkState === this.lastBlink) return;
     this.lastNav = time;
+    this.lastBlink = blinkState;
     const c = this.nav.context,
       w = this.nav.canvas.width,
       h = this.nav.canvas.height;
@@ -936,6 +938,21 @@ export class DriveRenderer {
       tall = this.car.id === "alphard";
     m.fillStyle = "#08121b";
     m.fillRect(0, 0, mw, mh);
+    const arrows = () => {
+      for (const side of [-1, 1]) {
+        const x = mw / 2 + side * mw * 0.46,
+          y = mh * 0.2,
+          r = mh * 0.09;
+        m.beginPath();
+        m.moveTo(x + side * r, y);
+        m.lineTo(x - side * r * 0.4, y - r);
+        m.lineTo(x - side * r * 0.4, y + r);
+        m.closePath();
+        m.fillStyle = blinkState === side ? "#45f27e" : "#1b2f29";
+        m.fill();
+      }
+    };
+
     if (!tall) {
       m.textAlign = "center";
       m.fillStyle = "#bdeddd";
@@ -956,6 +973,7 @@ export class DriveRenderer {
       m.fillStyle = "#b8cfc7";
       m.font = "19px Malgun Gothic";
       m.fillText("하이브리드 시스템", mw * 0.75, mh * 0.87);
+      arrows();
       this.meter.texture.needsUpdate = true;
       return;
     }
@@ -1010,6 +1028,7 @@ export class DriveRenderer {
     m.fillText("경제 운전", mw * 0.8, mh * 0.88);
     m.fillStyle = "#5caea4";
     m.fillRect(mw * 0.66, mh * 0.14, mw * 0.22, 3);
+    arrows();
     this.meter.texture.needsUpdate = true;
   }
   syncTraffic(cars, time) {

@@ -19,6 +19,7 @@ export const VIOLATIONS = {
   stop: { name: "일시정지 미준수", penalty: 10 },
   collision: { name: "차량·시설 접촉", penalty: 15 },
   camera: { name: "단속카메라 통과 중 속도 초과", penalty: 0 },
+  blinker: { name: "방향지시등 미사용", penalty: 5 },
 };
 export class DrivingScore {
   constructor() {
@@ -61,4 +62,33 @@ export class DrivingScore {
       penalty: this.events.filter((e) => e.type === type).reduce((n, e) => n + e.penalty, 0),
     }));
   }
+}
+
+// A stop sign node applies only to traffic facing it. OSM direction=forward /
+// backward is relative to the way the node lies on; signs without a direction
+// apply to traffic travelling along that way (not to crossing traffic).
+export function stopSignApplies(tags = {}, heading = 0, wayHeading = 0) {
+  const c = Math.cos(heading - wayHeading),
+    d = String(tags.direction || "").toLowerCase();
+  if (d === "forward") return c > 0.5;
+  if (d === "backward") return c < -0.5;
+  return Math.abs(c) > 0.7;
+}
+
+// Japanese road law: signal 30 m before a turn at an intersection.
+export const BLINKER_LEAD_METRES = 30;
+export function turnSide(maneuver = {}) {
+  if (!["turn", "end of road", "fork", "on ramp", "off ramp"].includes(maneuver.type)) return 0;
+  const m = maneuver.modifier || "";
+  if (/slight/.test(m) && maneuver.type === "turn") return 0;
+  return /left/.test(m) ? -1 : /right/.test(m) ? 1 : 0;
+}
+
+// Contact is the player's fault when the player's car was moving toward the
+// other body; being hit while stopped or by a car from behind is not.
+export function playerAtFault(player, other, gear) {
+  if (player.speed < 0.3) return false;
+  const fx = Math.sin(player.heading) * gear,
+    fy = -Math.cos(player.heading) * gear;
+  return (other.x - player.x) * fx + (other.y - player.y) * fy > 0;
 }

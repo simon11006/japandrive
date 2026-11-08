@@ -8,11 +8,20 @@ import {
   routeProgress,
   pointInRing,
 } from "./map-data.mjs";
-import { VEHICLES, integrateVehicle } from "./vehicles.mjs";
+import { VEHICLES, integrateVehicle, steeringLimit } from "./vehicles.mjs";
 import { sceneFeatures, drawSceneMap } from "./scene-features.mjs";
 import { DriveRenderer } from "./drive-renderer.mjs";
+import { loadViewSettings, saveViewSettings, viewSettings, VIEW_DEFAULTS } from "./driver-view.mjs";
 import { loadTerrain } from "./terrain.mjs";
-import { mappedSpeedLimit, DrivingScore } from "./driving-rules.mjs";
+import {
+  mappedSpeedLimit,
+  DrivingScore,
+  stopSignApplies,
+  turnSide,
+  playerAtFault,
+  BLINKER_LEAD_METRES,
+} from "./driving-rules.mjs";
+import { DriveAudio } from "./audio.mjs";
 import {
   TrafficSimulation,
   DIFFICULTIES,
@@ -125,11 +134,27 @@ try {
 const sceneCanvas = $("#scene");
 try {
   driver = new DriveRenderer(sceneCanvas);
+  driver.setView(loadViewSettings());
 } catch (error) {
   $("#engine-error").textContent =
     "입체 화면을 열지 못했습니다. 브라우저의 그래픽 가속을 켜고 다시 시도해 주세요.";
 }
 const keys = new Set();
+// Pedal positions ramp like a foot pressing a pedal: a tap is gentle, a held
+// key reaches full travel. Blinker: -1 left, 0 off, 1 right.
+let gasLevel = 0,
+  brakeLevel = 0,
+  blinker = 0,
+  blinkerSince = 0,
+  blinkerArmed = false;
+const checkedTurns = new Set();
+const sound = new DriveAudio();
+function setBlinker(side) {
+  if (!active || done) return;
+  blinker = blinker === side ? 0 : side;
+  blinkerSince = simulationTime;
+  blinkerArmed = false;
+}
 const distanceText = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)} km` : `${Math.round(n)} m`);
 
 function renderVehicles() {
@@ -972,6 +997,7 @@ function drawIntroMap() {
 
 $("#start").onclick = async () => {
   if ($("#start").disabled) return;
+  sound.start();
   const attempt = ++driveAttempt;
   driveAbort = new AbortController();
   const abortSignal = driveAbort.signal;
@@ -1051,7 +1077,6 @@ $("#start").onclick = async () => {
     active = true;
     intro = false;
     navZoom = false;
-    parkingBrake = false;
     parkedSeconds = 0;
     safetyScore = 100;
     simulationTime = 0;
@@ -1063,6 +1088,7 @@ $("#start").onclick = async () => {
     drivenDistance = 0;
     stopHistory.clear();
     passedCameras.clear();
+    checkedTurns.clear();
     warningUntil = 0;
     $("#violation-warning").hidden = true;
     signals = signalRecords.filter((s) => distance(s, pos) < 2200);
@@ -1127,8 +1153,13 @@ function resetPosition() {
     pos.x -= Math.cos(heading) * 1.5;
     pos.y -= Math.sin(heading) * 1.5;
   }
-  parkingBrake = false;
+  // A parked car starts with the parking brake set: release it with B,
+  // keep the brake pressed, then pull away — as in a real car.
+  parkingBrake = true;
   parkedSeconds = 0;
+  gasLevel = 0;
+  brakeLevel = 0;
+  blinker = 0;
 }
 $("#reset-position").onclick = resetPosition;
 $("#menu").onclick = () => {
@@ -1164,6 +1195,8 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.code === "KeyM") navZoom = !navZoom;
   if (e.code === "KeyB" && speed < 0.2) parkingBrake = !parkingBrake;
+  if (e.code === "KeyZ") setBlinker(-1);
+  if (e.code === "KeyX") setBlinker(1);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => {
@@ -1204,6 +1237,8 @@ for (const button of document.querySelectorAll("[data-action]"))
     if (action === "gear") changeGear(gear > 0 ? -1 : 1);
     if (action === "brake" && speed < 0.2) parkingBrake = !parkingBrake;
     if (action === "nav") navZoom = !navZoom;
+    if (action === "blink-left") setBlinker(-1);
+    if (action === "blink-right") setBlinker(1);
     if (action === "pause") {
       paused = true;
       keys.clear();
@@ -1372,8 +1407,10 @@ function hud() {
     ? "주차 완료 · 다음 드라이브를 선택하세요"
     : paused
       ? "일시정지 · Esc로 계속"
-      : simulationTime < 7
-        ? "W 가속 · S 제동 · A/D 조향 · M 내비 확대"
+      : parkingBrake && toPark >= 65
+        ? "주차 브레이크가 걸려 있습니다 · S로 브레이크를 밟은 채 B로 해제하세요"
+        : simulationTime < 7
+        ? "W 가속 · S 제동 · A/D 조향 · Z/X 방향지시등 · Q/E 미러 확인"
         : feedbackUntil > simulationTime
           ? feedback
           : toPark < 65
@@ -1441,6 +1478,7 @@ function coach(message, penalty = 0) {
 }
 function warnViolation(event, message) {
   if (!event) return;
+  sound.chime();
   coach(message || event.name);
   warningUntil = simulationTime + 4;
   $("#violation-warning").hidden = false;
@@ -1481,9 +1519,27 @@ function monitorRules(dt) {
     scoreCard.sustained("wrongWay", wrong, dt, simulationTime),
     "진행 방향과 왼쪽 차선을 확인하세요.",
   );
+  // Turn signal duty: on at least 30 m (about 2 s) before each turn.
+  for (const step of steps) {
+    const side = turnSide(step.maneuver);
+    if (!side || checkedTurns.has(step)) continue;
+    const d = distance(step.point, pos);
+    if (d < BLINKER_LEAD_METRES + 15 && d > 12 && blinker !== side && speed > 1)
+      coach(`전방 ${side < 0 ? "좌회전" : "우회전"} · ${side < 0 ? "Z" : "X"}로 방향지시등을 켜 주세요.`);
+    if (d < 12) {
+      checkedTurns.add(step);
+      if (blinker !== side || simulationTime - blinkerSince < 1.5)
+        warnViolation(
+          scoreCard.add("blinker", simulationTime),
+          `${side < 0 ? "좌회전" : "우회전"} 30m 전부터 방향지시등을 켜 주세요.`,
+        );
+    }
+  }
   const f = forward(heading);
   for (const rule of roadRules) {
     const d = distance(rule, pos);
+    // Leaving a stop sign behind rearms it for the next approach.
+    if (d > 40) stopHistory.delete(rule.id);
     if (d > 160) continue;
     const ahead = (rule.x - pos.x) * f.x + (rule.y - pos.y) * f.y,
       lateral = Math.abs((rule.x - pos.x) * f.y - (rule.y - pos.y) * f.x);
@@ -1500,6 +1556,8 @@ function monitorRules(dt) {
       }
     }
     if (rule.tags.highway === "stop" && lateral < 4) {
+      rule.wayHeading ??= nearestRoad(rule)?.heading;
+      if (rule.wayHeading == null || !stopSignApplies(rule.tags, heading, rule.wayHeading)) continue;
       const s = stopHistory.get(rule.id) || { stopped: false, passed: false, previous: null };
       if (ahead > 3 && ahead < 15 && speed < 0.1) s.stopped = true;
       if (s.previous != null && s.previous > 4 && ahead <= 4 && !s.passed && gear > 0) {
@@ -1593,6 +1651,50 @@ $("#help-close").onclick = () => {
   $("#help").hidden = true;
   if (active) paused = false;
 };
+// Seat and field-of-view settings, saved per browser.
+let viewWasPaused = false;
+function showViewSettings() {
+  const v = loadViewSettings();
+  $("#view-fov").value = v.fov;
+  $("#view-forward").value = Math.round(v.seatForward * 100);
+  $("#view-height").value = Math.round(v.seatHeight * 100);
+  $("#view-strip").checked = v.mirrorStrip;
+  $("#view-turn").checked = v.lookIntoTurn;
+  updateViewSettings(false);
+  viewWasPaused = paused;
+  if (active) paused = true;
+  $("#pause-menu").hidden = true;
+  $("#view-settings").hidden = false;
+}
+function updateViewSettings(save = true) {
+  const v = viewSettings({
+    fov: $("#view-fov").value,
+    seatForward: $("#view-forward").value / 100,
+    seatHeight: $("#view-height").value / 100,
+    mirrorStrip: $("#view-strip").checked,
+    lookIntoTurn: $("#view-turn").checked,
+  });
+  $("#view-fov-value").textContent = `${v.fov}°`;
+  $("#view-forward-value").textContent = `${v.seatForward > 0 ? "앞 " : v.seatForward < 0 ? "뒤 " : ""}${Math.abs(Math.round(v.seatForward * 100))} cm`;
+  $("#view-height-value").textContent = `${v.seatHeight > 0 ? "위 " : v.seatHeight < 0 ? "아래 " : ""}${Math.abs(Math.round(v.seatHeight * 100))} cm`;
+  driver?.setView(v);
+  if (save) saveViewSettings(v);
+}
+for (const id of ["#view-fov", "#view-forward", "#view-height", "#view-strip", "#view-turn"])
+  $(id).addEventListener("input", () => updateViewSettings());
+$("#view-open").onclick = showViewSettings;
+$("#pause-view").onclick = showViewSettings;
+$("#view-reset").onclick = () => {
+  saveViewSettings(VIEW_DEFAULTS);
+  showViewSettings();
+};
+$("#view-close").onclick = () => {
+  $("#view-settings").hidden = true;
+  if (active) {
+    paused = viewWasPaused;
+    $("#pause-menu").hidden = !paused;
+  }
+};
 $("#sources-open").onclick = () => ($("#sources").hidden = false);
 $("#sources-close").onclick = () => ($("#sources").hidden = true);
 $("#resume").onclick = () => {
@@ -1635,12 +1737,17 @@ function frame(t) {
       simulationTime += dt;
       const gas = keys.has("KeyW") || keys.has("ArrowUp"),
         brake = keys.has("KeyS") || keys.has("ArrowDown") || keys.has("Space");
+      gasLevel = gas ? Math.min(1, Math.max(gasLevel, 0.2) + dt * 1.4) : Math.max(0, gasLevel - dt * 4);
+      brakeLevel = brake ? Math.min(1, Math.max(brakeLevel, 0.3) + dt * 1.2) : Math.max(0, brakeLevel - dt * 5);
+      if (gas && parkingBrake && feedbackUntil < simulationTime)
+        coach("주차 브레이크가 걸려 있습니다. B를 눌러 해제하세요.");
       const previous = { ...pos, heading };
       const state = integrateVehicle(
         { x: pos.x, y: pos.y, speed, heading, steer, gear },
         {
-          gas: gas && !parkingBrake,
-          brake: brake || parkingBrake,
+          gas: parkingBrake ? 0 : gasLevel,
+          brake: parkingBrake ? 1 : brakeLevel,
+          creep: !parkingBrake,
           steer:
             (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
             (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0),
@@ -1652,6 +1759,14 @@ function frame(t) {
       speed = trainingMode === "parking" ? Math.min(2.8, state.speed) : state.speed;
       heading = state.heading;
       steer = state.steer;
+      // Self-cancelling blinker: once the wheel has turned the signalled way
+      // and comes back near centre, the stalk returns.
+      const limit = steeringLimit(car);
+      if (blinker && steer * blinker > limit * 0.4) blinkerArmed = true;
+      if (blinker && blinkerArmed && Math.abs(steer) < limit * 0.08) {
+        blinker = 0;
+        blinkerArmed = false;
+      }
       drivenDistance += distance(pos, previous);
       const body = vehicleCorners({ ...pos, heading }, car);
       if (
@@ -1659,6 +1774,7 @@ function frame(t) {
         visibleFeatures.some((f) => f.tags.building && body.some((p) => insidePolygon(p, f.points)))
       ) {
         pos = { x: previous.x, y: previous.y };
+        sound.thud();
         warnViolation(
           scoreCard.add("collision", simulationTime),
           "시설물과 접촉했습니다. 후진해서 간격을 확보하세요.",
@@ -1673,19 +1789,23 @@ function frame(t) {
           coach("도로 가장자리입니다. 천천히 차도로 돌아오세요.");
         }
       }
-      traffic?.tick(dt, simulationTime, { ...pos, speed, heading });
-      if (
-        simulationTime - lastCollision > 1.5 &&
-        (traffic?.cars || []).some((n) => rectanglesOverlap({ ...pos, heading }, car, n, n))
-      ) {
+      traffic?.tick(dt, simulationTime, { ...pos, speed, heading, length: car.length, width: car.width });
+      // Bodies never pass through each other. Only contact the player drove
+      // into is scored; being touched while stopped is not.
+      const contact = (traffic?.cars || []).find((n) => rectanglesOverlap({ ...pos, heading }, car, n, n));
+      if (contact) {
+        const moving = { ...previous, speed };
         pos = { x: previous.x, y: previous.y };
-        if (speed > 0.3)
-          warnViolation(
-            scoreCard.add("collision", simulationTime),
-            "차량과 접촉했습니다. 정차하고 주변을 확인하세요.",
-          );
+        if (speed > 0.3 && simulationTime - lastCollision > 1.5) {
+          sound.thud();
+          if (playerAtFault(moving, contact, gear))
+            warnViolation(
+              scoreCard.add("collision", simulationTime),
+              "차량과 접촉했습니다. 정차하고 주변을 확인하세요.",
+            );
+          lastCollision = simulationTime;
+        }
         speed = 0;
-        lastCollision = simulationTime;
       }
       for (const s of signals) {
         const f = forward(heading),
@@ -1731,15 +1851,25 @@ function frame(t) {
       navInfo,
       navZoom,
       rear,
-      look: keys.has("KeyQ") ? 0.75 : keys.has("KeyE") ? -0.75 : 0,
+      look: keys.has("KeyQ") ? 1 : keys.has("KeyE") ? -1 : 0,
+      dt,
+      blinker,
+      blinkerLit: sound.lit || (!sound.context && Math.floor(simulationTime / 0.35) % 2 === 0),
       drawNavigation: drawMap,
     });
+    sound.update(dt, { speed, gas: gasLevel, gear, blinker, running: !paused && !done });
+    for (const [id, side] of [
+      ["#blink-left", -1],
+      ["#blink-right", 1],
+    ])
+      $(id).classList.toggle("lit", blinker === side && (sound.lit || !sound.context));
     if (t - lastHud > 150) {
       lastHud = t;
       drawMap(mc, miniCanvas.width, miniCanvas.height, 0.17);
       hud();
     }
   } else if (driver && features.length) {
+    sound.update(dt, { running: false });
     simulationTime += dt;
     traffic?.tick(dt, simulationTime, { ...pos, heading, speed: 0 });
     driver.render({
