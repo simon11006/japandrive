@@ -10,6 +10,8 @@ import {
 } from "./simulation.mjs";
 import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
+import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
+import { steeringLimit } from "./vehicles.mjs";
 
 const mat = (color, roughness = 0.8, extra = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness, ...extra });
@@ -390,6 +392,9 @@ export class DriveRenderer {
     this.scene.add(ocean);
     this.ocean = ocean;
   }
+  setView(settings) {
+    this.view = viewSettings(settings);
+  }
   local(p, y = 0) {
     return new THREE.Vector3(p.x - this.base.x, this.elevation(p) + y, p.y - this.base.y);
   }
@@ -751,13 +756,13 @@ export class DriveRenderer {
     this.navigationAnchor = cockpit.navigationAnchor;
     this.cockpitLayout = cockpit.layout;
     for (const mount of cockpit.mirrors) {
-      const target = new THREE.WebGLRenderTarget(512, mount.side ? 288 : 160),
-        camera = new THREE.PerspectiveCamera(
-          mount.side ? 38 : 40,
-          512 / (mount.side ? 288 : 160),
-          0.08,
-          1000,
-        );
+      // Side mirrors: convex glass, about 42° wide. Cabin mirror: about 44°.
+      const target = new THREE.WebGLRenderTarget(512, mount.side ? 288 : 160, {
+          generateMipmaps: true,
+          minFilter: THREE.LinearMipmapLinearFilter,
+          samples: 2,
+        }),
+        camera = new THREE.PerspectiveCamera(mount.side ? 24 : 15, 512 / (mount.side ? 288 : 160), 0.08, 1500);
       mount.plane.material.map = target.texture;
       this.mirrors.push({ ...mount, target, camera });
     }
@@ -850,53 +855,56 @@ export class DriveRenderer {
     this.interior.add(plane);
     this.mirrors.push({ target, camera, plane, side });
   }
-  drawPortraitMirrors(width, height) {
+  // Mirror insets drawn over the cockpit view. Portrait phones show both door
+  // mirrors; landscape shows only the passenger-side (left) mirror, which a
+  // right-hand-drive driver sees about 50° to the left, outside a normal
+  // monitor's frame. It hides while the player glances toward it with Q.
+  drawMirrorInsets(width, height, portrait) {
     if (this.overlayMirrors.length !== 2) {
       disposeGroup(this.mirrorOverlay);
       this.overlayMirrors = [];
       for (const side of [-1, 1]) {
         const group = new THREE.Group(),
-          bg = new THREE.Mesh(
-            new THREE.PlaneGeometry(1, 1),
-            new THREE.MeshBasicMaterial({ color: "#152930" }),
-          );
+          bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: "#0e1b20" }));
         group.add(bg);
         const mirror = this.mirrors.find((m) => m.side === side),
           plane = new THREE.Mesh(
             new THREE.PlaneGeometry(1, 1),
             new THREE.MeshBasicMaterial({ map: mirror.target.texture }),
           );
-        plane.scale.x = -1;
         plane.position.z = 0.01;
         group.add(plane);
         const label = new THREE.Mesh(
           new THREE.PlaneGeometry(1, 1),
           new THREE.MeshBasicMaterial({
-            map: labelTexture(side < 0 ? "왼쪽 미러" : "오른쪽 미러", "#c3d5c9", "#152930"),
+            map: labelTexture(side < 0 ? "왼쪽 미러" : "오른쪽 미러", "#c3d5c9", "#0e1b20"),
           }),
         );
         label.position.z = 0.02;
         group.add(label);
         this.mirrorOverlay.add(group);
-        this.overlayMirrors.push({ group, bg, plane, label });
+        this.overlayMirrors.push({ side, group, bg, plane, label });
       }
     }
-    Object.assign(this.overlayCamera, {
-      left: -width / 2,
-      right: width / 2,
-      top: height / 2,
-      bottom: -height / 2,
-    });
+    Object.assign(this.overlayCamera, { left: -width / 2, right: width / 2, top: height / 2, bottom: -height / 2 });
     this.overlayCamera.updateProjectionMatrix();
-    const mw = width * 0.39,
-      mh = mw * 0.56;
-    this.overlayMirrors.forEach((m, i) => {
-      m.group.position.set((i ? 1 : -1) * width * 0.26, height * 0.5 - height * 0.23 - mh / 2, 0);
-      m.bg.scale.set(mw + 6, mh + 20, 1);
+    const mw = portrait ? width * 0.39 : Math.min(300, width * 0.2),
+      mh = mw * 0.56,
+      glancingLeft = (this.headYaw ?? 0) > 0.4;
+    let shown = 0;
+    for (const m of this.overlayMirrors) {
+      m.group.visible = portrait || this.debugInsets || (m.side < 0 && !glancingLeft);
+      if (!m.group.visible) continue;
+      shown++;
+      if (portrait) m.group.position.set(m.side * width * 0.26, height * 0.5 - height * 0.23 - mh / 2, 0);
+      else m.group.position.set(m.side * (width / 2 - mw / 2 - 18), height * 0.08, 0);
+      m.bg.scale.set(mw + 6, mh + 24, 1);
+      // Mirror textures are already mirrored by the camera flip below.
       m.plane.scale.set(-mw, mh, 1);
-      m.label.scale.set(mw, 17, 1);
-      m.label.position.y = mh / 2 + 3;
-    });
+      m.label.scale.set(mw, 18, 1);
+      m.label.position.y = mh / 2 + 4;
+    }
+    if (!shown) return;
     this.renderer.autoClear = false;
     this.renderer.clearDepth();
     this.renderer.render(this.mirrorOverlay, this.overlayCamera);
@@ -1158,21 +1166,34 @@ export class DriveRenderer {
       state.position.y - this.base.y,
     );
     this.rig.rotation.set(pose.pitch, -state.heading, pose.roll, "YXZ");
-    this.camera.rotation.y = state.navZoom ? 0 : state.look || 0;
     const anchor = this.navigationAnchor,
-      layout = this.cockpitLayout;
-    this.camera.rotation.x = state.navZoom ? -Math.atan2(this.car.eyeHeight - 0.03 - anchor.y, 0.6) : -0.1;
-    const portrait = this.camera.aspect < 0.85;
-    this.camera.position.set(
-      state.navZoom ? anchor.x : portrait ? 0.25 : layout.eyeX,
-      this.car.eyeHeight - (state.navZoom ? 0.03 : 0),
-      state.navZoom ? anchor.z + 0.6 : portrait ? 0.4 : layout.eyeZ,
-    );
-    const horizontalFov = state.navZoom ? (this.car.id === "prius" ? 45 : 55) : 103;
-    this.camera.fov =
-      portrait && !state.navZoom
-        ? 85
-        : (2 * Math.atan(Math.tan((horizontalFov * Math.PI) / 360) / this.camera.aspect) * 180) / Math.PI;
+      layout = this.cockpitLayout,
+      view = this.view || viewSettings(),
+      portrait = this.camera.aspect < 0.85;
+    // Head yaw: Q/E glance at a door mirror, otherwise an optional gentle look
+    // into slow turns. Smoothed so the head never snaps.
+    const targetYaw = state.navZoom
+      ? 0
+      : state.look
+        ? Math.sign(state.look) * GLANCE
+        : view.lookIntoTurn
+          ? lookIntoTurn(state.steer || 0, state.speed || 0, steeringLimit(this.car))
+          : 0;
+    this.headYaw = (this.headYaw ?? 0) + (targetYaw - (this.headYaw ?? 0)) * Math.min(1, (state.dt || 1 / 60) * 9);
+    this.camera.rotation.y = this.headYaw;
+    const eye = driverEye(this.car, layout, view);
+    if (state.navZoom) {
+      this.camera.rotation.x = -Math.atan2(eye.y - 0.03 - anchor.y, 0.6);
+      this.camera.position.set(anchor.x, eye.y - 0.03, anchor.z + 0.6);
+      const navFov = this.car.id === "prius" ? 45 : 55;
+      this.camera.fov = (2 * Math.atan(Math.tan((navFov * Math.PI) / 360) / this.camera.aspect) * 180) / Math.PI;
+    } else {
+      // Eyes rest a few degrees below the horizon, as when driving.
+      this.camera.rotation.x = portrait ? -0.09 : -0.085;
+      if (portrait) this.camera.position.set(eye.x - 0.12, eye.y + 0.02, eye.z + 0.1);
+      else this.camera.position.copy(eye);
+      this.camera.fov = verticalFov(view, this.camera.aspect);
+    }
     this.camera.updateProjectionMatrix();
     this.updateDisplays({ ...state, navInfo: state.navInfo, drawNavigation: state.drawNavigation });
     if (state.gear < 0) {
@@ -1203,7 +1224,8 @@ export class DriveRenderer {
       for (const m of this.mirrors) {
         this.externalCar.visible = m.side !== 0;
         const source = this.rig.localToWorld(m.mount.clone()),
-          direction = new THREE.Vector3(m.side * 0.46, -0.025, 1).applyQuaternion(this.rig.quaternion),
+          // Adjusted as taught: the car's flank just visible on the inner edge.
+          direction = new THREE.Vector3(m.side * 0.3, m.side ? -0.05 : -0.03, 1).applyQuaternion(this.rig.quaternion),
           up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.rig.quaternion);
         m.camera.position.copy(source);
         m.camera.up.copy(up);
@@ -1235,7 +1257,7 @@ export class DriveRenderer {
     } else {
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, this.camera);
-      if (portrait && !state.navZoom) this.drawPortraitMirrors(w, h);
+      if (!state.navZoom && (portrait || view.mirrorStrip)) this.drawMirrorInsets(w, h, portrait);
     }
   }
 }

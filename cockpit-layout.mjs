@@ -1,6 +1,9 @@
 // Metre-scale reconstruction from Toyota Japan reference photographs.
 // Overall car dimensions are published; eye point and component depths remain
 // photo-calibrated estimates rather than Toyota CAD or a physical survey.
+// eyeZ puts the eye about 0.57 m behind the wheel hub, a normal seating
+// distance. Door mirrors sit on the door at the belt line just behind the
+// A-pillar base, so the pillar never crosses them (tests/visibility.test.mjs).
 export const COCKPITS = {
   prius: {
     wheelRadius: 0.182,
@@ -16,16 +19,16 @@ export const COCKPITS = {
     meterHeight: 0.061,
     meterDrop: 0.17,
     meterZ: -1.13,
-    glassBottom: -1.3,
+    glassBottom: -1.2,
     glassTop: -0.43,
     pillarBaseWidth: 0.094,
     pillarTopWidth: 0.06,
     mirrorWidth: 0.245,
     mirrorHeight: 0.137,
-    mirrorZ: -1.02,
-    mirrorDrop: 0.145,
+    mirrorZ: -1.0,
+    mirrorDrop: 0.2,
     eyeX: 0.38,
-    eyeZ: 0.28,
+    eyeZ: 0.14,
     reference: "references/user-prius-interior.png",
   },
   alphard: {
@@ -49,9 +52,9 @@ export const COCKPITS = {
     mirrorWidth: 0.268,
     mirrorHeight: 0.159,
     mirrorZ: -1.02,
-    mirrorDrop: 0.135,
+    mirrorDrop: 0.2,
     eyeX: 0.38,
-    eyeZ: 0.28,
+    eyeZ: 0.14,
     reference: "references/user-alphard-interior.png",
   },
 };

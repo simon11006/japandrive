@@ -1146,11 +1146,13 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
     const w = cfg.mirrorWidth,
       h = cfg.mirrorHeight,
       group = new T.Group(),
-      x = side * (car.width / 2 + 0.085),
+      x = side * (car.width / 2 + (cfg.mirrorOut ?? 0.085)),
       y = eye - cfg.mirrorDrop,
       z = cfg.mirrorZ;
     group.position.set(x, y, z);
-    group.rotation.y = side * 0.12;
+    // Door mirrors are angled to show the car's flank from the driver's eye.
+    group.rotation.y = side * (cfg.mirrorYaw ?? 0.12);
+    group.userData.mirrorHousing = true;
     root.add(group);
     const outline = [
       [-w * 0.49, -h * 0.32],
@@ -1163,21 +1165,28 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
       [-w * 0.5, h * 0.25],
     ];
     polygon(group, outline, 0.044, [0, 0, 0], mats.black, 0.009);
-    tube(
-      root,
+    // The arm and its door base sit outside the glass on the door skin, below
+    // and behind the housing, so they never cover the mirror from inside.
+    const baseX = -side * (x - side * (car.width / 2 + 0.012));
+    const arm = tube(
+      group,
       [
-        [side * (half + 0.005), eye - 0.24, z + 0.13],
-        [x - side * 0.055, y - 0.022, z],
+        [-side * w * 0.3, -h * 0.32, -0.02],
+        [baseX, -h * 0.5, -0.035],
       ],
-      0.022,
+      0.015,
       mats.black,
     );
+    arm.name = "door-mirror-arm";
+    const base = rounded(group, [0.04, 0.035, 0.1], [baseX, -h * 0.52, -0.05], mats.black, 0.012);
+    base.name = "door-mirror-base";
     const shape = new T.Shape(outline.map(([x, y]) => new T.Vector2(x * 0.88, y * 0.85))),
       plane = new T.Mesh(
         glassGeometry(shape, w * 0.88, h * 0.85),
         new T.MeshBasicMaterial({ side: T.DoubleSide }),
       );
-    plane.position.z = 0.031;
+    // In front of the housing's 9 mm bevel so the glass never z-fights it.
+    plane.position.z = 0.036;
     plane.scale.x = -1;
     group.add(plane);
     mirrorMounts.push({
