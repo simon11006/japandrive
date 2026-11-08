@@ -185,7 +185,7 @@ export function makeTrafficCar(kind = "sedan", color = "#e8eceb") {
   const g = new THREE.Group(),
     van = kind === "van",
     body = mat(color, 0.28, { metalness: 0.3 }),
-    glass = mat("#28444c", 0.2, { metalness: 0.35 }),
+    glass = mat("#0f1a1f", 0.08, { metalness: 0.6, envMapIntensity: 1.4, side: THREE.DoubleSide }),
     rubber = mat("#162126");
   const length = van ? 4.9 : 4.3,
     width = van ? 1.85 : 1.72;
@@ -1189,12 +1189,21 @@ export class DriveRenderer {
       this.externalCar.visible = true;
       this.externalCar.position.copy(this.local(state.position));
       this.externalCar.rotation.y = -state.heading;
-      const angle = 0.3 + Math.sin(state.time * 0.07) * 0.12,
-        center = this.local(state.position, 1);
-      this.introCamera.position
-        .copy(center)
-        .add(new THREE.Vector3(Math.cos(angle) * 24, 8.5, Math.sin(angle) * 24 + 9));
-      this.introCamera.lookAt(center.clone().add(new THREE.Vector3(-3, 1, -2)));
+      // Slow, low cinematic orbit; the car sits in the right third of the
+      // frame so the title menu has the left side.
+      const t = state.time,
+        angle = 0.9 + t * 0.04,
+        radius = 12.5 + Math.sin(t * 0.09) * 2,
+        lift = 1.25 + (Math.sin(t * 0.06) + 1) * 0.6,
+        center = this.local(state.position, 0.9),
+        eye = center.clone().add(new THREE.Vector3(Math.cos(angle) * radius, lift, Math.sin(angle) * radius)),
+        toCar = center.clone().sub(eye).setY(0).normalize(),
+        right = new THREE.Vector3(-toCar.z, 0, toCar.x);
+      this.introCamera.position.copy(eye);
+      this.introCamera.lookAt(center.clone().addScaledVector(right, -2.2).add(new THREE.Vector3(0, 0.35, 0)));
+      this.sun.target.position.copy(center);
+      this.sun.position.copy(center).addScaledVector(SUN_DIRECTION, 220);
+      this.sky.position.copy(center);
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, this.introCamera);
       return;

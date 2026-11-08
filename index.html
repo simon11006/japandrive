@@ -16,32 +16,54 @@
         ><button id="view-open">시야 설정</button><button id="help-open">조작 방법</button><button id="menu" hidden>목적지 변경</button>
       </div>
     </header>
-    <section id="splash" class="splash">
-      <div class="splash-atmosphere" aria-hidden="true"></div>
-      <div class="splash-content">
-        <span class="intro-location"><i></i> 오키나와 본섬</span>
-        <p class="eyebrow">처음 만나는 일본의 길</p>
-        <h1>
-          일본<span>드라이브<span class="title-dot">.</span></span>
-        </h1>
-        <p class="splash-tagline">내비게이션을 따라 달리고,<br />목적지 주차까지 직접 완성하세요.</p>
-        <div class="splash-menu">
-          <button id="play" class="play-button"><span>드라이브 시작</span><b aria-hidden="true">↗</b></button
-          ><button id="splash-help">조작 방법 <span aria-hidden="true">＋</span></button>
+    <section id="splash" class="splash title-screen">
+      <div class="title-shade" aria-hidden="true"></div>
+      <div class="title-letterbox top" aria-hidden="true"></div>
+      <div class="title-letterbox bottom" aria-hidden="true"></div>
+      <div class="title-logo">
+        <div class="route-shield" aria-hidden="true"><small>国道</small><b>58</b></div>
+        <div class="sign-plate">
+          <small>日本ドライブ · OKINAWA</small>
+          <h1>일본 드라이브</h1>
+          <p class="sign-sub">JAPAN DRIVE</p>
+          <div class="sign-strip"><span>← 左側通行</span><span>KEEP LEFT</span></div>
         </div>
-        <p id="intro-status" class="fine" role="status">오키나와 지도를 불러오는 중…</p>
+        <p class="title-tagline">실제 지도 위에서 익히는, 첫 일본 운전</p>
       </div>
-      <div class="intro-map-panel">
-        <div class="intro-map-heading"><span>이번 드라이브의 무대</span><strong>오키나와 본섬</strong></div>
+      <button id="press-start" class="press-start">
+        <span>PRESS ANY KEY</span><small>아무 키나 누르거나 화면을 클릭하세요</small>
+      </button>
+      <nav id="title-menu" class="title-menu" aria-label="메인 메뉴" hidden>
+        <button id="play" class="menu-item" data-hint="지역 · 차량 · 출발지 · 목적지 · 교통량을 고르고 출발합니다.">
+          <i>01</i><span>드라이브 시작</span><em>START</em>
+        </button>
+        <button id="quick-play" class="menu-item" data-hint="모토부 숙소 → 카이호우마루 · 실제 도로 543m · 주차까지 바로 연습합니다.">
+          <i>02</i><span>빠른 출발</span><em>QUICK DRIVE</em>
+        </button>
+        <button id="title-view" class="menu-item" data-hint="시야각과 좌석 위치를 내 모니터와 자세에 맞춥니다.">
+          <i>03</i><span>시야 설정</span><em>VIEW</em>
+        </button>
+        <button id="splash-help" class="menu-item" data-hint="페달, 방향지시등, 미러 확인, 주차 브레이크 조작을 확인합니다.">
+          <i>04</i><span>조작 방법</span><em>CONTROLS</em>
+        </button>
+        <button id="title-sources" class="menu-item" data-hint="지도 · 차량 자료와 게임이 재현한 범위를 확인합니다.">
+          <i>05</i><span>자료와 재현 범위</span><em>CREDITS</em>
+        </button>
+        <p id="menu-hint" class="menu-hint" aria-live="polite"></p>
+      </nav>
+      <aside class="stage-card">
+        <div class="stage-head"><small>STAGE 01</small><strong>오키나와 본섬</strong></div>
         <canvas id="intro-map" aria-label="오키나와 본섬과 드라이브 목적지 지도"></canvas>
-        <div class="intro-map-note">
-          <span class="map-dot"></span> 숙소 · 식당 · 관광지 <span>남부에서 북부까지</span>
+        <span>좌측통행 · 우핸들 · 추천 장소 27곳</span>
+      </aside>
+      <footer class="title-footer">
+        <div class="title-loading">
+          <p id="intro-status" role="status">오키나와 지도를 불러오는 중…</p>
+          <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
-      </div>
-      <div class="splash-bottom">
-        <span>좌측통행 <i>／</i> 우핸들 <i>／</i> 실제 지도 기반</span
-        ><span>출발부터 주차까지, 하나의 드라이브.</span>
-      </div>
+        <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
+        <span class="title-version">TEST 0.6</span>
+      </footer>
     </section>
     <main id="select" hidden>
       <div class="intro">

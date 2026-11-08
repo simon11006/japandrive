@@ -1114,6 +1114,7 @@ $("#start").onclick = async () => {
     $("#select").hidden = true;
     $("#result").hidden = true;
     $("#splash").hidden = true;
+    setTitle(false);
     document.body.classList.add("driving");
     window.scrollTo(0, 0);
     $("#trip-status").textContent = `${distanceText(routeInfo.distance)} · 자동차 경로 연결됨`;
@@ -1617,13 +1618,94 @@ function completeParking() {
   $("#result").append(small, h, p, score, rows, note, b);
 }
 
-$("#play").onclick = () => {
+// ---------- Title screen: attract mode, then a keyboard-driven menu ----------
+const menuItems = () => [...document.querySelectorAll("#title-menu .menu-item")];
+let menuIndex = 0;
+function setTitle(on) {
+  document.body.classList.toggle("on-title", on);
+  if (on) {
+    $("#title-menu").hidden = true;
+    $("#press-start").hidden = false;
+  }
+}
+function uiBlip(confirm = false) {
+  sound.start();
+  if (confirm) {
+    sound.tone(880, 0.09, "square", 0.05);
+    sound.tone(1320, 0.14, "square", 0.05, 0.08);
+  } else sound.tone(1250, 0.05, "square", 0.035);
+}
+function focusMenu(index) {
+  const items = menuItems();
+  menuIndex = (index + items.length) % items.length;
+  items.forEach((item, i) => item.classList.toggle("active", i === menuIndex));
+  items[menuIndex].focus({ preventScroll: true });
+  $("#menu-hint").textContent = items[menuIndex].dataset.hint;
+}
+function openTitleMenu() {
+  if (!$("#title-menu").hidden) return;
+  uiBlip(true);
+  $("#press-start").hidden = true;
+  $("#title-menu").hidden = false;
+  focusMenu(0);
+}
+$("#press-start").onclick = openTitleMenu;
+$("#splash").addEventListener("pointerdown", (e) => {
+  if ($("#title-menu").hidden && !e.target.closest("button")) openTitleMenu();
+});
+menuItems().forEach((item, i) => {
+  item.addEventListener("pointerenter", () => {
+    if (menuIndex !== i) uiBlip();
+    focusMenu(i);
+  });
+  item.addEventListener("click", () => uiBlip(true), { capture: true });
+});
+window.addEventListener("keydown", (e) => {
+  if ($("#splash").hidden || active || document.querySelector(".game-dialog:not([hidden])")) return;
+  if ($("#title-menu").hidden) {
+    if (!["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+      e.preventDefault();
+      openTitleMenu();
+    }
+    return;
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    uiBlip();
+    focusMenu(menuIndex + (e.key === "ArrowDown" ? 1 : -1));
+  } else if (e.key === "Escape") {
+    setTitle(true);
+  }
+});
+function openWizard() {
   intro = false;
+  setTitle(false);
   $("#splash").hidden = true;
   $("#select").hidden = false;
+  $("#select").classList.remove("from-title");
+  void $("#select").offsetWidth;
+  $("#select").classList.add("from-title");
   document.body.classList.remove("driving");
+}
+$("#play").onclick = () => {
+  openWizard();
   showWizardStep(1);
 };
+// Quick drive: the stored real route from the Motobu hotel to Kaihoumaru.
+$("#quick-play").onclick = () => {
+  if (!regionReady || !region?.island) {
+    $("#menu-hint").textContent = "지도를 불러오는 중입니다. 잠시 후 다시 선택해 주세요.";
+    return;
+  }
+  openWizard();
+  maxReachedStep = 6;
+  showWizardStep(6);
+  $("#quick-test").click();
+  $("#start").click();
+};
+$("#title-view").onclick = () => showViewSettings();
+$("#title-sources").onclick = () => ($("#sources").hidden = false);
+setTitle(true);
 $("#back-title").onclick = returnToTitle;
 $("#pause-title").onclick = returnToTitle;
 function returnToTitle() {
@@ -1633,6 +1715,7 @@ function returnToTitle() {
   paused = false;
   keys.clear();
   $("#splash").hidden = false;
+  setTitle(true);
   $("#select").hidden = true;
   $("#hint").hidden = true;
   $("#hud").hidden = true;
