@@ -330,13 +330,13 @@ export const createRequestHandler =
   };
 // Start on port 8000, or the next free port if another program already uses
 // it. With --open the browser is opened at the address actually in use.
-export function listen(server, port = 8000, last = 8010, host = "127.0.0.1") {
+export function listen(server, port = 8000, last = 8010, host = "127.0.0.1", log = () => {}) {
   return new Promise((done, fail) => {
     const attempt = (p) => {
       const onError = (error) => {
         server.off("listening", onListening);
         if (error.code === "EADDRINUSE" && p < last) {
-          console.log(`포트 ${p}은(는) 다른 프로그램이 사용 중입니다. ${p + 1}번으로 시도합니다.`);
+          log(`포트 ${p}은(는) 다른 프로그램이 사용 중입니다. ${p + 1}번으로 시도합니다.`);
           attempt(p + 1);
         } else fail(error);
       };
@@ -362,7 +362,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const count = Number(process.env.WORKERS) || (host === "0.0.0.0" ? Math.min(availableParallelism(), 8) : 1);
     // Find a free port first (8000, or the next one), then share it.
     const probe = http.createServer();
-    const port = await listen(probe, Number(process.env.PORT) || 8000, 8010, host);
+    const port = await listen(probe, Number(process.env.PORT) || 8000, 8010, host, console.log);
     await new Promise((r) => probe.close(r));
     const fork = () => cluster.fork({ PORT: String(port), JD_WORKER: "1" });
     for (let i = 0; i < count; i++) fork();
