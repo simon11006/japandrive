@@ -11,6 +11,7 @@ import {
 import { VEHICLES, integrateVehicle, steeringLimit } from "./vehicles.mjs";
 import { sceneFeatures, drawSceneMap } from "./scene-features.mjs";
 import { DriveRenderer } from "./drive-renderer.mjs";
+import { drawNavMap, drawCarMarker } from "./nav-display.mjs";
 import { loadViewSettings, saveViewSettings, viewSettings, VIEW_DEFAULTS } from "./driver-view.mjs";
 import { loadTerrain } from "./terrain.mjs";
 import {
@@ -1288,60 +1289,23 @@ $("#gear-reverse").onclick = () => changeGear(-1);
 $("#nav-closer").onclick = () => (navZoom = !navZoom);
 
 function drawMap(context, width, height, scale) {
-  context.fillStyle = "#0d2932";
-  context.fillRect(0, 0, width, height);
+  // Heading-up map with the car two thirds of the way down.
   const cv = (p) => {
     const dx = p.x - pos.x,
       dy = p.y - pos.y;
     return {
       x: width / 2 + (dx * Math.cos(heading) + dy * Math.sin(heading)) * scale,
-      y: height * 0.65 + (-dx * Math.sin(heading) + dy * Math.cos(heading)) * scale,
+      y: height * 0.66 + (-dx * Math.sin(heading) + dy * Math.cos(heading)) * scale,
     };
   };
-  drawSceneMap(context, visibleFeatures, cv, scale);
-  for (const road of visibleRoads) {
-    context.beginPath();
-    road.points.forEach((p, i) => {
-      const q = cv(p);
-      i ? context.lineTo(q.x, q.y) : context.moveTo(q.x, q.y);
-    });
-    context.lineWidth = Math.max(2, scale * 5);
-    context.strokeStyle = "#45636a";
-    context.stroke();
-  }
-  context.beginPath();
-  route.forEach((p, i) => {
-    const q = cv(p);
-    i ? context.lineTo(q.x, q.y) : context.moveTo(q.x, q.y);
+  drawNavMap(context, width, height, scale, {
+    roads: visibleRoads,
+    features: visibleFeatures,
+    route,
+    goal: parkingGoal?.center,
+    convert: cv,
   });
-  context.strokeStyle = "#183d45";
-  context.lineWidth = 24;
-  context.stroke();
-  context.strokeStyle = "#b9f3cc";
-  context.lineWidth = 13;
-  context.stroke();
-  if (parkingGoal) {
-    const end = cv(parkingGoal.center);
-    context.fillStyle = "#ccedac";
-    context.font = "bold 26px sans-serif";
-    context.fillText("P", end.x, end.y);
-  }
-  for (const npc of traffic?.cars || []) {
-    const p = cv(npc);
-    context.fillStyle = "#eac77d";
-    context.fillRect(p.x - 3, p.y - 3, 6, 6);
-  }
-  context.save();
-  context.translate(width / 2, height * 0.65);
-  context.fillStyle = "#ffffff";
-  context.beginPath();
-  context.moveTo(0, -23);
-  context.lineTo(-13, 14);
-  context.lineTo(0, 8);
-  context.lineTo(13, 14);
-  context.closePath();
-  context.fill();
-  context.restore();
+  drawCarMarker(context, width / 2, height * 0.66, Math.max(9, Math.min(20, width / 34)));
 }
 
 async function updateRoads() {
@@ -1417,10 +1381,24 @@ function hud() {
       parkingGoal.type === "bay"
         ? "주차장 안의 초록색 주차면에 주차하세요"
         : "주차장 안의 빈 공간에 안전하게 정차하세요";
+  const korean = (t = "") => t.replace(/県道(\d+)号線/g, "현도 $1호선").replace(/国道(\d+)号線/g, "국도 $1호선");
+  const remainingSeconds =
+    routeInfo?.duration && routeInfo?.distance ? (routeInfo.duration * progress.remaining) / routeInfo.distance : null;
+  const arrival = remainingSeconds != null ? new Date(Date.now() + remainingSeconds * 1000) : null;
   navInfo = {
-    instruction: $("#instruction")
-      .textContent.replace(/県道(\d+)号線/g, "현도 $1호선")
-      .replace(/国道(\d+)号線/g, "국도 $1호선"),
+    instruction: korean($("#instruction").textContent),
+    maneuver: toPark < 65 ? { type: "arrive" } : next?.maneuver,
+    action: direction,
+    street: korean(next?.name || ""),
+    toTurn,
+    minutes: remainingSeconds != null ? Math.max(1, Math.round(remainingSeconds / 60)) : null,
+    eta: arrival
+      ? `${String(arrival.getHours()).padStart(2, "0")}:${String(arrival.getMinutes()).padStart(2, "0")}`
+      : null,
+    limit: currentLimit.value,
+    speed: Math.round(speed * 3.6),
+    parking: toPark < 65,
+    remainingMeters: progress.remaining,
     destination: selected?.name || "주차 연습",
     remaining: toPark < 65 ? `${Math.round(toPark)} m · 주차` : distanceText(progress.remaining),
     distanceToTurn: toTurn,

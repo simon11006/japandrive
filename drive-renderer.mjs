@@ -11,6 +11,7 @@ import {
 import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
 import { makeCarModel } from "./car-model.mjs";
+import { drawNavOverlay } from "./nav-display.mjs";
 import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
 import { steeringLimit } from "./vehicles.mjs";
 import {
@@ -945,15 +946,8 @@ export class DriveRenderer {
     const mapScale =
       navInfo?.parkingDistance < 35 ? 7 : navInfo?.distanceToTurn < 70 ? 3.8 : speed > 13 ? 1.8 : 2.8;
     this.mapScale = mapScale;
-    drawNavigation(c, w, h * 0.7, mapScale);
-    c.fillStyle = "#10232e";
-    c.fillRect(0, h * 0.7, w, h * 0.3);
-    c.font = "bold 34px Malgun Gothic";
-    c.fillStyle = "#c3f5cd";
-    c.fillText(navInfo?.instruction || "목적지로 출발하세요", 18, h * 0.8, w - 36);
-    c.font = "26px Malgun Gothic";
-    c.fillStyle = "#e0e8e9";
-    c.fillText(`${navInfo?.destination || ""}   ${navInfo?.remaining || ""}`, 18, h * 0.93, w - 36);
+    drawNavigation(c, w, h, mapScale);
+    drawNavOverlay(c, w, h, navInfo);
     this.nav.texture.needsUpdate = true;
     const m = this.meter.context,
       mw = this.meter.canvas.width,
