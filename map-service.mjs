@@ -303,6 +303,10 @@ export function createMapService({
       if ((b[2] - b[0]) * (b[3] - b[1]) > 0.0025) throw new Error("지도 조회 범위가 너무 넓습니다.");
     if (query.includes("[highway~"))
       return selectMapQuery(merge(await Promise.all(bounds.map((b) => roadTile(b, signal)))), query);
+    if (query.includes("[amenity=parking]")) {
+      const fromPack = await packParking(query);
+      if (fromPack) return fromPack;
+    }
     try {
       return selectMapQuery(await overpass(query, signal), query);
     } catch (error) {
@@ -399,5 +403,122 @@ export function createMapService({
       signal,
     );
   }
-  return { mapQuery, route, fetchJson, roadTile, roadGraph };
+  // ---------- Island places and parking (offline pack) ----------
+  // Everything a driver might head for, plus every mapped parking lot (with
+  // its outline, so the game can guide the car into it).
+  const PLACE_QUERY = (b) => `[out:json][timeout:180];(
+nwr["amenity"~"^(parking|restaurant|cafe|fast_food|fuel|car_rental|ice_cream|food_court|pub|bar|marketplace|charging_station|toilets)$"](${b});
+nwr["shop"~"^(convenience|supermarket|mall|department_store|gift|seafood|bakery|car)$"](${b});
+nwr["tourism"~"^(attraction|hotel|guest_house|hostel|motel|apartment|museum|viewpoint|theme_park|aquarium|zoo|camp_site|information|picnic_site)$"](${b});
+nwr["leisure"~"^(park|beach_resort|water_park|golf_course|marina|sports_centre|stadium)$"]["name"](${b});
+nwr["natural"="beach"]["name"](${b});
+nwr["historic"]["name"](${b});
+nwr["aeroway"="aerodrome"]["name"](${b});
+);out center tags;`;
+  const PARKING_QUERY = (b) => `[out:json][timeout:180];way["amenity"="parking"](${b});out geom;`;
+  async function placeBox(b, signal) {
+    return saved("places:" + boxKey(b), (s) => overpassRaw(PLACE_QUERY(boxKey(b)), s), signal);
+  }
+  async function parkingBox(b, signal) {
+    return saved("parking:" + boxKey(b), (s) => overpassRaw(PARKING_QUERY(boxKey(b)), s), signal);
+  }
+  // Saved pack files by kind (roads / places / parking), read from disk.
+  async function packFiles(prefix) {
+    const out = [];
+    let files = [];
+    try {
+      files = (await readdir(cacheDir)).filter((f) => f.endsWith(".json"));
+    } catch {}
+    for (const f of files) {
+      try {
+        const text = await readFile(resolve(cacheDir, f), "utf8");
+        if (!text.includes(`"source":"${prefix}`)) continue;
+        const saved = JSON.parse(text);
+        if (String(saved.source).startsWith(prefix)) out.push({ file: f, ...saved });
+      } catch {}
+    }
+    return out;
+  }
+  // Parking near a destination: answered from the pack when it covers the
+  // spot, so destination lookups need no public server either.
+  async function packParking(query) {
+    const around = query.match(/around:([\d.]+),([\d.-]+),([\d.-]+)/);
+    if (!around) return null;
+    const lat = +around[2],
+      lon = +around[3];
+    const boxes = await packFiles("parking:");
+    const covering = boxes.filter((b) => {
+      const [s, w, n, e] = b.source.slice(8).split(",").map(Number);
+      return lat >= s && lat <= n && lon >= w && lon <= e;
+    });
+    if (!covering.length) return null;
+    return selectMapQuery(merge(covering.map((b) => b.data)), query);
+  }
+  // Re-download the oldest pack file once it is older than `days`.
+  // Called now and then by one server worker while it is idle.
+  async function refreshStale(days = 30) {
+    const files = [...(await packFiles("roads:")), ...(await packFiles("places:")), ...(await packFiles("parking:"))];
+    const old = files
+      .filter((f) => Date.now() - Date.parse(f.fetchedAt || 0) > days * 86400000)
+      .sort((a, b) => Date.parse(a.fetchedAt || 0) - Date.parse(b.fetchedAt || 0))[0];
+    if (!old) return null;
+    const [kind, box] = [old.source.split(":")[0], old.source.split(":")[1]],
+      controller = new AbortController();
+    const data =
+      kind === "roads"
+        ? await overpassRaw(`[out:json][timeout:45];way(${box})${ROAD_FILTER};out geom;`, controller.signal)
+        : kind === "places"
+          ? await overpassRaw(PLACE_QUERY(box), controller.signal)
+          : await overpassRaw(PARKING_QUERY(box), controller.signal);
+    const path = resolve(cacheDir, old.file);
+    await writeFile(path + ".tmp", JSON.stringify({ schema: 1, source: old.source, fetchedAt: new Date().toISOString(), data }));
+    await rename(path + ".tmp", path);
+    memory.delete(old.source);
+    return old.source;
+  }
+  // Online address search (OpenStreetMap Nominatim) for places missing from
+  // the island data. Its usage policy allows one request per second, so all
+  // players share one slot with a pause; answers are saved and reused.
+  const geocodeSlot = limiter(1);
+  async function geocode(text, signal) {
+    const q = String(text).trim().slice(0, 120);
+    return saved(
+      "geocode:" + q.toLowerCase(),
+      (shared) =>
+        geocodeSlot(async () => {
+          const url =
+            "https://nominatim.openstreetmap.org/search?" +
+            new URLSearchParams({
+              q,
+              format: "jsonv2",
+              countrycodes: "jp",
+              viewbox: "127.6,26.95,128.4,26.0",
+              bounded: "1",
+              limit: "6",
+              "accept-language": "ko,ja,en",
+            });
+          try {
+            const r = await fetcher(url, {
+              signal: AbortSignal.any([shared, AbortSignal.timeout(10000)]),
+              headers: { Accept: "application/json", "User-Agent": "JapanDrive/0.6 (driving practice game; cached lookups)" },
+            });
+            if (!r.ok) throw new Error(`주소 검색 서버 응답 ${r.status}`);
+            const rows = await r.json();
+            return rows.map((row) => ({
+              id: `${row.osm_type}/${row.osm_id}`,
+              name: row.name || row.display_name.split(",")[0],
+              address: row.display_name,
+              kind: row.type,
+              lat: Number(row.lat),
+              lon: Number(row.lon),
+              source: `https://www.openstreetmap.org/${row.osm_type}/${row.osm_id}`,
+            }));
+          } finally {
+            await new Promise((resolve) => setTimeout(resolve, 1100));
+          }
+        }),
+      signal,
+    );
+  }
+  return { mapQuery, route, fetchJson, roadTile, roadGraph, placeBox, parkingBox, packFiles, refreshStale, geocode };
 }

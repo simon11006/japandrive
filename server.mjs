@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMapService } from "./map-service.mjs";
+import { buildIndex, entriesFromOsm, search, parseLocation } from "./place-search.mjs";
 import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { networkInterfaces } from "node:os";
@@ -45,6 +46,48 @@ async function staticFile(path) {
     };
   files.set(path, entry);
   return entry;
+}
+// Place search index: recommended places (Korean names), bundled island
+// places and the island-wide places saved by the offline map pack. Rebuilt
+// at most once a minute when new pack files appear.
+let placeIndex = null,
+  placeIndexAt = 0,
+  placeIndexBuilding = null;
+async function places() {
+  if (placeIndex && Date.now() - placeIndexAt < 60000) return placeIndex;
+  if (placeIndexBuilding) return placeIndexBuilding;
+  placeIndexBuilding = (async () => {
+    const read = (f) =>
+      readFile(resolve(root, "data", f), "utf8")
+        .then(JSON.parse)
+        .catch(() => null);
+    const [catalog, pois, extras, pack] = await Promise.all([
+      read("places.json"),
+      read("okinawa-pois.json"),
+      read("okinawa-extra-pois.json"),
+      maps.packFiles("places:"),
+    ]);
+    const elements = [...(pois?.elements || []), ...(extras?.elements || [])],
+      byId = new Map(elements.map((e) => [`${e.type}/${e.id}`, e]));
+    const recommended = (catalog?.places || []).flatMap((p) => {
+      const pattern = p.match ? new RegExp(p.match, "i") : null;
+      const e = p.osm
+        ? byId.get(p.osm)
+        : elements.find((e) => pattern && Object.entries(e.tags || {}).some(([k, v]) => k.startsWith("name") && pattern.test(v)));
+      const lat = p.lat ?? e?.lat ?? e?.center?.lat,
+        lon = p.lon ?? e?.lon ?? e?.center?.lon;
+      const names = [e?.tags?.name, e?.tags?.["name:en"], e?.tags?.["name:ja"]].filter(Boolean);
+      return Number.isFinite(lat) ? [{ id: p.id, name: p.name, names, kind: p.kind, lat, lon, recommended: true }] : [];
+    });
+    const packed = pack.flatMap((f) => entriesFromOsm(f.data.elements));
+    const dates = pack.map((f) => f.fetchedAt).filter(Boolean).sort();
+    placeIndex = buildIndex([...recommended, ...entriesFromOsm(elements), ...packed]);
+    placeIndex.updatedAt = dates[0] || null;
+    placeIndex.packed = pack.length;
+    placeIndexAt = Date.now();
+    return placeIndex;
+  })().finally(() => (placeIndexBuilding = null));
+  return placeIndexBuilding;
 }
 // Finished API replies (map tiles, routes) are kept serialised and
 // compressed, keyed by request URL, so hundreds of players asking for the
@@ -197,6 +240,35 @@ export const createRequestHandler =
         res.end(JSON.stringify({ app: "japan-drive", version: "0.6" }));
         return;
       }
+      if (url.pathname === "/api/places") {
+        const q = (url.searchParams.get("q") || "").slice(0, 200),
+          lat = Number(url.searchParams.get("lat")),
+          lon = Number(url.searchParams.get("lon")),
+          index = await places(),
+          meta = { count: index.count, updatedAt: index.updatedAt, packed: index.packed };
+        const point = parseLocation(q);
+        if (point) {
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ...meta, results: [{ id: `pin:${point.lat.toFixed(6)},${point.lon.toFixed(6)}`, name: "붙여 넣은 위치", kindName: "좌표", ...point }], source: "pin" }));
+          return;
+        }
+        let results = q ? search(index, q, { near: Number.isFinite(lat) ? { lat, lon } : null }) : [];
+        let source = "local";
+        // Not in the island data: ask the online address search (if reachable).
+        if (q.trim().length >= 2 && results.length < 3 && url.searchParams.get("online") !== "0") {
+          try {
+            const online = await maps.geocode(q, requestAbort.signal);
+            if (online.length) {
+              results = [...results, ...online.map((r) => ({ ...r, kindName: "주소 검색", online: true }))].slice(0, 8);
+              source = "online";
+            }
+          } catch {}
+        }
+        if (res.destroyed) return;
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ...meta, results, source }));
+        return;
+      }
       if (url.pathname === "/api/route") {
         const start = url.searchParams.get("start"),
           end = url.searchParams.get("end");
@@ -321,6 +393,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       spawn(command, args, { detached: true, stdio: "ignore" }).unref();
     }
   } else {
+    // One worker keeps the offline map data fresh: every 2 minutes it
+    // re-downloads the single oldest file if it is more than 30 days old.
+    if (cluster.worker?.id === 1 && process.env.JD_NO_REFRESH !== "1")
+      setInterval(() => {
+        maps
+          .refreshStale(30)
+          .then((source) => source && console.log(`지도 데이터 갱신: ${source}`))
+          .catch(() => {});
+      }, 120000).unref();
     const server = http.createServer(createRequestHandler());
     server.keepAliveTimeout = 5000;
     server.headersTimeout = 10000;
