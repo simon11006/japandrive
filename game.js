@@ -1,4 +1,5 @@
 import { startTranslation, t, LANG, setLanguage } from "./i18n.mjs";
+import {approachFor} from './junctions.mjs';
 import {
   REGIONS,
   projection,
@@ -158,6 +159,7 @@ let roadRules = [],
   passedCameras = new Set(),
   warningUntil = 0;
 let courses=[], selectedCourse=null, courseBundle=null, courseFilter='all', courseTerrain={courses:{}}, tollSession=null, tollAction=false;
+let courseWorld=null;
 let lastWallContact=null;
 const courseCache=new Map();
 const touchDisplay=matchMedia('(any-pointer: coarse)');
@@ -752,8 +754,6 @@ const wizardLabels = COURSE_STEPS;
 async function loadCourses(){
   const [catalog,terrain]=await Promise.all([json('./data/driving-courses.json'),json('./data/course-terrain.json').catch(()=>({courses:{}}))]);
   courses=catalog.courses;courseTerrain=terrain;
-  const order=['chatan-town','naha-city','motobu-first','onna-coast','motobu-hills','e58-express'];
-  courses.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
   maxReachedStep=1;
   renderCourses();
   await chooseCourse(courses[0]);
@@ -761,6 +761,7 @@ async function loadCourses(){
     prepareCourseWorld();
     active=false;intro=true;speed=0;
     $('#loading').textContent='';
+    $('#intro-status').textContent='';
   }
 }
 function renderCourses(){
@@ -796,13 +797,17 @@ async function chooseCourse(c){
   $('#loading').textContent='선택한 코스의 도로와 주차장을 불러오는 중…';
   try{
     const bundle=courseCache.get(c.id)||await json(c.bundle);courseCache.set(c.id,bundle);
+    const nextProjection=projection(bundle.origin);
+    const [terrain,boundary]=await Promise.all([loadTerrain(nextProjection),c.region==='오키나와'?json('./data/okinawa-main-island.geojson'):Promise.resolve(null)]);
     if(selectedCourse.id!==c.id)return;
+    courseWorld={projection:nextProjection,elevation:terrain,coast:boundary?.geometry.coordinates[0].map(nextProjection.toLocal)||null};
+    regionReady=true;
     courseBundle=bundle;
     const start=bundle.route.geometry.coordinates[0],end=bundle.route.geometry.coordinates.at(-1);
     departure={id:c.id+'-start',name:c.startLabel,lon:start[0],lat:start[1],resolved:true};
     selected={id:c.id+'-finish',name:c.finishLabel,lon:end[0],lat:end[1],resolved:true};
     $('#chosen').textContent=selected.name;$('#trip-status').className='muted';$('#trip-status').textContent='코스 준비 완료 · 신호를 지키며 목적지에 도착해 주차하세요.';$('#quick-test').hidden=true;
-    $('#loading').textContent='';updateCourseSelection();updateStart();drawOverview();
+    $('#loading').textContent='';updateCourseSelection();updateStart();drawOverview();drawIntroMap();
   }catch(error){if(selectedCourse.id===c.id)$('#loading').textContent='코스를 불러오지 못했습니다. 카드를 눌러 다시 시도해 주세요.';}
 }
 for(const b of document.querySelectorAll('#course-filters button'))b.onclick=()=>{courseFilter=b.dataset.filter;for(const button of document.querySelectorAll('#course-filters button'))button.setAttribute('aria-pressed',String(button===b));renderCourses();};
@@ -810,8 +815,10 @@ for(const [id,direction]of [['#course-prev',-1],['#course-next',1]])$(id).onclic
 function prepareCourseWorld(){
   // Courses already contain their scenery; keep long-drive streaming separate.
   buildings=null;
+  proj=courseWorld.projection;elevation=courseWorld.elevation;coast=courseWorld.coast;
+  region={id:selectedCourse.area,name:selectedCourse.region,origin:courseBundle.origin,island:selectedCourse.region==='오키나와'};
   const bundle=courseBundle;store=courseRoadStore(bundle,proj);routeInfo=bundle.route;route=routeInfo.geometry.coordinates.map(proj.toLocal);
-  features=sceneFeatures({elements:bundle.scene.elements.filter(e=>e.tags?.building||e.tags?.amenity==='parking'||e.tags?.natural||e.tags?.landuse)},proj);
+  features=sceneFeatures(bundle.scene,proj);
   parkingGoal=courseParking(bundle.parking,proj);bays=[parkingGoal];
   const nodes=bundle.scene.elements.filter(e=>e.type==='node').map(e=>({...e,...proj.toLocal([e.lon,e.lat])}));
   signalRecords=bundle.signals.map(e=>{const p=proj.toLocal([e.lon,e.lat]);let best={distance:Infinity,heading:0};for(let i=1;i<route.length;i++){const m=nearestOnSegment(p,route[i-1],route[i]);if(m.distance<best.distance)best={...m,heading:headingBetween(route[i-1],route[i])};}return {...e,...p,courseHeading:best.heading};});signals=signalRecords;
@@ -822,7 +829,7 @@ function prepareCourseWorld(){
   tollSession=new TollSession(bundle.tolls.map(g=>({...g,...proj.toLocal(g.geo),mode})),mode);
   const graded=courseElevation(elevation,store.roads,tollSession.gates,parkingGoal);
   driver?.setup({base:pos,roads:store.roads,features,coast,elevation:graded,signals,bays,car,projection:proj,
-    course:{theme:selectedCourse.theme,nodes,route,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
+    course:{theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
   driver?.setRoadRules(roadRules,store.roads);
   traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
 }
@@ -1104,6 +1111,7 @@ function drawOverview() {
 }
 
 function drawIntroMap() {
+  if(selectedCourse){drawCourseMap($('#intro-map'),selectedCourse,courseBundle);return;}
   const canvas = $("#intro-map"),
     c = canvas.getContext("2d"),
     w = canvas.clientWidth,
@@ -1423,8 +1431,10 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "KeyX") setBlinker(1);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
+function clearDriveInput(){keys.clear();gasLevel=0;brakeLevel=0;document.querySelectorAll('[data-key].held').forEach(b=>b.classList.remove('held'));}
+window.addEventListener('orientationchange',()=>{clearDriveInput();if(active&&!done){paused=true;$('#pause-menu').hidden=false;}});
 window.addEventListener("blur", () => {
-  keys.clear();
+  clearDriveInput();
   if (active && !done) {
     paused = true;
     $("#pause-menu").hidden = false;
@@ -1432,7 +1442,7 @@ window.addEventListener("blur", () => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    keys.clear();
+    clearDriveInput();
     if (active && !done) {
       paused = true;
       $("#pause-menu").hidden = false;
@@ -1442,6 +1452,7 @@ document.addEventListener("visibilitychange", () => {
 for (const button of document.querySelectorAll("[data-key]")) {
   button.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    if(!active||paused||done)return;
     button.setPointerCapture(e.pointerId);
     keys.add(button.dataset.key);
     button.classList.add("held");
@@ -1456,16 +1467,16 @@ for (const button of document.querySelectorAll("[data-key]")) {
 }
 for (const button of document.querySelectorAll("[data-action]"))
   button.onclick = () => {
-    if (!active) return;
+    if (!active||paused||done) return;
     const action = button.dataset.action;
     if (action === "gear") changeGear(gear > 0 ? -1 : 1);
-    if (action === "brake" && speed < 0.2) parkingBrake = !parkingBrake;
+    if (action === "brake") {if(speed < 0.2)parkingBrake = !parkingBrake;else coach("완전히 멈춘 뒤 주차 브레이크를 사용하세요.");}
     if (action === "nav") navZoom = !navZoom;
     if (action === "blink-left") setBlinker(-1);
     if (action === "blink-right") setBlinker(1);
     if (action === "pause") {
       paused = true;
-      keys.clear();
+      clearDriveInput();
       $("#pause-menu").hidden = false;
     }
   };
@@ -1693,6 +1704,8 @@ function hud() {
     : gear < 0
       ? (touchUI?"R 후진 · 후방카메라 확인":"R 후진 · W 가속 / S 제동")
       : (touchUI?"D 전진 · 페달로 속도 조절":"D 전진 · W 가속 / S 제동");
+  const parkButton=$('[data-action="brake"]');parkButton.textContent=parkingBrake?'주차 해제':'주차 잠금';parkButton.setAttribute('aria-pressed',String(parkingBrake));parkButton.classList.toggle('selected',parkingBrake);
+  for(const [action,side]of [['blink-left',-1],['blink-right',1]])$(`[data-action="${action}"]`).setAttribute('aria-pressed',String(blinker===side));
   if (nearbySignal && nearbySignal.ahead < 45 && signalColor === "red" && !done && !paused)
     $("#hint").textContent = "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
 }
@@ -2134,9 +2147,9 @@ $("#play").onclick = () => {
   openWizard();
   showWizardStep(1);
 };
-// Quick drive: the stored real route from the Motobu hotel to Kaihoumaru.
+// Quick drive: the short Motobu village route to the Hanasaki parking area.
 $("#quick-play").onclick = async () => {
-  if (!regionReady || !region?.island || !courses.length) {
+  if (!regionReady || !courses.length) {
     $("#menu-hint").textContent = "지도를 불러오는 중입니다. 잠시 후 다시 선택해 주세요.";
     return;
   }
@@ -2266,14 +2279,32 @@ $("#pause-reset").onclick = () => {
   paused = false;
   $("#pause-menu").hidden = true;
 };
-$("#fullscreen").onclick = async () => {
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await document.documentElement.requestFullscreen();
-  } catch {
-    coach("브라우저 창을 넓히면 운전석을 더 편하게 볼 수 있습니다.");
+function refreshFullscreenButtons(){
+  const full=Boolean(document.fullscreenElement||document.webkitFullscreenElement);
+  const standalone=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone;
+  for(const b of document.querySelectorAll('[data-fullscreen]')){
+    b.textContent=full?'⛶ 화면 복귀':standalone?'⛶ 화면 안내':'⛶ 전체화면';
+    b.setAttribute('aria-label',full?'전체화면 종료':'전체화면으로 전환');b.setAttribute('aria-pressed',String(full));
   }
-};
+}
+async function toggleFullscreen(){
+  clearDriveInput();
+  try{
+    if(document.fullscreenElement)await document.exitFullscreen();
+    else if(document.webkitFullscreenElement)await document.webkitExitFullscreen();
+    else if(document.documentElement.requestFullscreen&&document.fullscreenEnabled)await document.documentElement.requestFullscreen({navigationUI:'hide'});
+    else if(document.documentElement.webkitRequestFullscreen&&document.webkitFullscreenEnabled)document.documentElement.webkitRequestFullscreen();
+    else showFullscreenHelp();
+  }catch{showFullscreenHelp();}
+  refreshFullscreenButtons();
+}
+function showFullscreenHelp(){
+  if(active&&!done){paused=true;$('#pause-menu').hidden=false;}
+  $('#fullscreen-help').showModal();
+}
+for(const b of document.querySelectorAll('[data-fullscreen]'))b.onclick=toggleFullscreen;
+for(const name of ['fullscreenchange','webkitfullscreenchange'])document.addEventListener(name,()=>{clearDriveInput();refreshFullscreenButtons();refreshDriveLayout();});
+refreshFullscreenButtons();
 
 let last = performance.now();
 // One unexpected error must never freeze the game: report it, keep running.
@@ -2409,9 +2440,12 @@ function frameBody(t) {
         speed = 0;
       }
       for (const s of signals) {
+        const approach=approachFor(s,heading);
+        if(s.approaches&&!approach)continue;
+        const stopDistance=approach?.stopDistance??5;
         const f = forward(heading),
-          a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - 5,
-          b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - 5,
+          a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - stopDistance,
+          b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - stopDistance,
           l = Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x);
         const phase=signalPhase(s,heading,simulationTime);
         if(phase==='flash-red'&&b>0&&b<12&&speed<.1)stopHistory.set('flash-'+s.id,true);
@@ -2420,7 +2454,7 @@ function frameBody(t) {
         if (
           a > 0 &&
           b <= 0 &&
-          l < 5 &&
+          l < (approach?approach.width/2+1:5) &&
           ((phase === "red"&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+s.id))) &&
           simulationTime - lastSignalViolation > 3
         ) {
@@ -2495,5 +2529,5 @@ new ResizeObserver(() => {
 new ResizeObserver(drawIntroMap).observe($("#intro-map"));
 renderRegions();
 renderVehicles();
-loadRegion(REGIONS.find((r) => r.id === "okinawa")).then(loadCourses).catch(error=>{$('#loading').textContent='코스 자료를 불러오지 못했습니다. '+error.message;});
+loadCourses().catch(error=>{$('#loading').textContent='코스 자료를 불러오지 못했습니다. '+error.message;});
 requestAnimationFrame(frame);

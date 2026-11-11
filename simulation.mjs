@@ -123,7 +123,7 @@ export function signalRightArrow(signal,heading,time){
 export function synchronizeSignals(signals) {
   const groups = [];
   for (const s of signals) {
-    const related = groups.filter((g) => g.some((p) => distance(p, s) < 65));
+    const related = groups.filter((g) => g.some((p) => distance(p, s) < 28));
     if (!related.length) groups.push([s]);
     else {
       const merged = [s, ...related.flat()];
@@ -132,10 +132,12 @@ export function synchronizeSignals(signals) {
     }
   }
   for (const g of groups) {
-    const anchor = g.slice().sort((a, b) => Number(a.id) - Number(b.id))[0];
+    const anchor = g.slice().sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', {numeric:true}))[0];
+    const profile=g.some(s=>s.profile==='arrow')?'arrow':anchor.profile;
     for (const s of g) {
       s.timingId = anchor.id;
       s.axis = anchor.approachHeading ?? anchor.axis ?? 0;
+      s.profile=profile;
     }
   }
   return signals;
@@ -206,6 +208,7 @@ export class TrafficSimulation {
     this.serial = 1;
     this.origin = { ...start };
     this.targetCount = count;
+    this.junctionOwners=new Map();
     const candidates = this.graph.edges.filter(
       (e) => distance(e.from, start) < 420 && distance(e.from, start) > 18 && e.length > 5,
     );
@@ -292,6 +295,13 @@ export class TrafficSimulation {
   }
   tick(dt, time, player) {
     const bodies = [...this.cars, player,...(this.barriers||[])];
+    // A car that entered on green keeps the crossing until its rear clears.
+    // This also prevents a right-turning queue blocking the next green phase.
+    for(const [id,lock]of this.junctionOwners){
+      const d=distance(lock.car,lock.center);
+      if(!this.cars.includes(lock.car)||(lock.entered&&d>lock.radius+4))this.junctionOwners.delete(id);
+      else if(d<lock.radius)lock.entered=true;
+    }
     for (const car of this.cars) {
       let target = car.edge.highway==='motorway'?Math.max(car.desired,20):car.desired;
       const f = forward(car.heading);
@@ -302,7 +312,11 @@ export class TrafficSimulation {
           ahead = dx * f.x + dy * f.y,
           lateral = Math.abs(dx * f.y - dy * f.x);
         // Keep a 2-second gap, never closer than about 6 m between centres.
-        if (ahead > 0 && ahead < 30 && lateral < 2.1)
+        // A crossing or oncoming car is not a lead vehicle. Junction priority
+        // and body collision checks below handle it without a permanent queue.
+        const aligned=other===player||other.barrier||Math.cos((other.heading??car.heading)-car.heading)>.7;
+        const laneGap=(car.width+(other.width||1.8))/2+.15;
+        if (aligned && ahead > 0 && ahead < 30 && lateral < laneGap)
           target = Math.min(target, Math.max(0, (ahead - 6.5) / 2));
       }
       // Slow for the coming turn: about 15 km/h for a right angle.
@@ -313,13 +327,15 @@ export class TrafficSimulation {
         if (turn > 0.35) target = Math.min(target, Math.max(3.6, 9 - turn * 3.4) + toEnd * 0.25);
       }
       for (const s of this.signals) {
+        const approach=s.approaches?.find(a=>Math.abs(wrapAngle(a.heading-car.edge.heading))<Math.PI/4);
+        if(s.approaches&&!approach)continue;
         const dx = s.x - car.x,
           dy = s.y - car.y,
           ahead = dx * f.x + dy * f.y,
           lateral = Math.abs(dx * f.y - dy * f.x),
-          // The stop line is drawn 5 m before the mapped signal point.
-          toLine = ahead - 5 - car.length / 2;
-        if (ahead <= 0 || ahead > 45 || lateral > 7 || toLine < -0.5) continue;
+          // Share the visible stop-line setback for this incoming approach.
+          toLine = ahead - (approach?.stopDistance??5) - car.length / 2;
+        if (ahead <= 0 || ahead > 60 || lateral > (approach?.width/2+1||7) || toLine < -0.5) continue;
         const phase = signalPhase(s, car.heading, time);
         if (phase === "green") continue;
         if (phase === 'flash-yellow') {target=Math.min(target,6);continue;}
@@ -334,6 +350,19 @@ export class TrafficSimulation {
         if (phase === "yellow" && car.speed ** 2 / (2 * Math.max(0.1, toLine)) > 3.5) continue;
         target = Math.min(target, Math.sqrt(2 * 2.5 * Math.max(0, toLine - 0.5)));
       }
+      for(const s of this.signals){
+        if(!s.approaches?.length)continue;
+        const radius=Math.max(...s.approaches.map(a=>a.stopDistance)),d=distance(car,s);
+        if(d>radius+18)continue;
+        const ahead=(s.x-car.x)*f.x+(s.y-car.y)*f.y,lateral=Math.abs((s.x-car.x)*f.y-(s.y-car.y)*f.x);
+        if(ahead<0||lateral>radius)continue;
+        const id=s.timingId??s.id,lock=this.junctionOwners.get(id),entry=ahead-radius-car.length/2;
+        if(lock&&lock.car!==car&&entry>-.5){
+          target=Math.min(target,Math.sqrt(5*Math.max(0,entry-.5)));
+        }else if(!lock&&entry<4&&target>.2){
+          this.junctionOwners.set(id,{car,center:s,radius,entered:d<radius});
+        }
+      }
       car.braking = target < car.speed - 0.2;
       const speed = Math.max(0, car.speed + Math.max(-4.5 * dt, Math.min(1.4 * dt, target - car.speed)));
       // Never advance into another body (including the player's car).
@@ -341,10 +370,12 @@ export class TrafficSimulation {
       const hits = bodies.filter(
         (other) => other !== car && other.length && rectanglesOverlap(probe, car, other, other),
       );
-      // Two AI cars nosed into each other at a junction would wait forever;
-      // after 6 s the AI-only standoff is released. The player is never ignored.
+      // After a long AI-only standoff, relax the forward safety probe;
+      // the actual-position check below still prevents bodies overlapping.
+      // The player and toll barriers always retain the forward safety gap.
       car.blockedFor = hits.length ? (car.blockedFor || 0) + dt : 0;
       const blocked = hits.includes(player) || hits.some(h=>h.barrier) || (hits.length > 0 && car.blockedFor < 6);
+      const previousState={edge:car.edge,next:car.next,along:car.along,x:car.x,y:car.y,heading:car.heading};
       car.speed = blocked ? 0 : speed;
       if (blocked) car.braking = true;
       car.along += car.speed * dt;
@@ -364,6 +395,11 @@ export class TrafficSimulation {
       this.place(car);
       // Bodies swing through the corner instead of snapping to the new edge.
       car.heading = previous + wrapAngle(car.heading - previous) * Math.min(1, (car.speed * dt) / 2.2 + 0.02);
+      // Switching to a differently sized/angled lane can move the centre
+      // sideways. Check the actual result as well as the forward probe.
+      const entered=bodies.some(other=>other!==car&&other.length&&rectanglesOverlap(car,car,other,other)&&
+        blocksMove(previousState,car,other,rectanglesOverlap(previousState,car,other,other)));
+      if(entered){Object.assign(car,previousState);car.speed=0;car.braking=true;}
     }
     this.serial++;
   }

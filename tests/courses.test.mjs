@@ -10,14 +10,16 @@ import {groundSurface,surfacePose} from '../road-surface.mjs';
 const read=async p=>JSON.parse(await readFile(new URL(p,import.meta.url),'utf8'));
 const catalog=await read('../data/driving-courses.json');
 const p=projection([127.68,26.214]);
-test('six short courses expose region, estimated minutes, stars and distinct situations',()=>{
- assert.equal(catalog.courses.length,6);assert.equal(new Set(catalog.courses.map(c=>c.id)).size,6);
+test('eleven short courses cover six regions with estimated minutes, stars and distinct situations',()=>{
+ assert.equal(catalog.courses.length,11);assert.equal(new Set(catalog.courses.map(c=>c.id)).size,11);
+ assert.deepEqual(new Set(catalog.courses.map(c=>c.region)),new Set(['도쿄','오사카','후쿠오카','교토','삿포로','오키나와']));
  for(const c of catalog.courses){assert.ok(c.region);assert.ok(c.minutes[1]<=10&&c.minutes[0]>0);assert.ok(c.stars>=1&&c.stars<=5);assert.ok(c.features.length>=3);assert.ok(c.distance<3000);}
  assert.ok(catalog.courses.filter(c=>['city','urban'].includes(c.theme)).length>=2);
 });
 test('course route geometry has continuous road coverage and usable destination parking',async()=>{
  for(const c of catalog.courses){
-  const bundle=await read('../'+c.bundle),store=courseRoadStore(bundle,p),route=bundle.route.geometry.coordinates.map(p.toLocal);
+  const bundle=await read('../'+c.bundle),p=projection(bundle.origin),store=courseRoadStore(bundle,p),route=bundle.route.geometry.coordinates.map(p.toLocal);
+  assert.ok(route.every(q=>Math.hypot(q.x,q.y)<65000),`${c.id}: incorrect regional projection`);
   assert.ok(route.length>5);assert.ok(store.roads.length>0);assert.ok(routeProgress(route,route.at(-1),bundle.route.distance).remaining<.001);
   for(const q of route){let d=Infinity;for(const r of store.roads)for(let i=1;i<r.points.length;i++)d=Math.min(d,nearestOnSegment(q,r.points[i-1],r.points[i]).distance);assert.ok(d<3,`${c.id}: missing road ${d}m`);}
   const goal=courseParking(bundle.parking,p);assert.ok(distance(goal.center,route.at(-1))<200,`${c.id}: parking too far away`);

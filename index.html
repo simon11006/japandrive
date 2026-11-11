@@ -2,18 +2,25 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#071b25" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="manifest.json" />
     <title>KEEP LEFT: Japan Drive · 일본 첫 운전 연습</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="responsive-drive.css" />
   </head>
   <body>
-    <canvas id="scene" aria-label="오키나와 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
+    <canvas id="scene" aria-label="일본 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
+    <button id="mobile-fullscreen" data-fullscreen aria-label="전체화면으로 전환">⛶ 전체화면</button>
+    <dialog id="fullscreen-help"><h2>더 넓은 화면에서 운전하기</h2><p>이 브라우저에서는 전체화면 전환을 지원하지 않습니다.</p><p>iPhone·iPad에서는 Safari의 공유 메뉴에서 <b>홈 화면에 추가</b>한 뒤 아이콘으로 실행하세요. 가로로 돌리면 앞 도로와 조작 버튼을 더 넓게 볼 수 있습니다.</p><form method="dialog"><button class="primary">확인</button></form></dialog>
     <div id="engine-error" role="alert"></div>
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.7</span><button id="fullscreen">전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.8</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -25,7 +32,7 @@
       <div class="title-logo">
         <div class="route-shield" aria-hidden="true"><small>国道</small><b>58</b></div>
         <div class="sign-plate">
-          <small>日本ドライブ · OKINAWA</small>
+          <small>日本ドライブ · JAPAN</small>
           <h1>KEEP LEFT</h1>
           <p class="sign-sub">JAPAN DRIVE</p>
           <div class="sign-strip"><span>← 左側通行</span><span>일본 첫 운전 연습</span></div>
@@ -39,7 +46,7 @@
         <button id="play" class="menu-item" data-hint="코스의 별점과 예상 시간을 확인하고, 차량과 교통량을 골라 출발하세요.">
           <i>01</i><span>드라이브 시작</span><em>START</em>
         </button>
-        <button id="quick-play" class="menu-item" data-hint="모토부 숙소 → 카이호우마루 · 실제 도로 543m · 주차까지 바로 연습합니다.">
+        <button id="quick-play" class="menu-item" data-hint="모토부 마을길 543m · 약 3–4분 · 신호와 주차까지 바로 연습합니다.">
           <i>02</i><span>빠른 출발</span><em>QUICK DRIVE</em>
         </button>
         <button id="title-view" class="menu-item" data-hint="시야각과 좌석 위치를 내 모니터와 자세에 맞춥니다.">
@@ -54,17 +61,17 @@
         <p id="menu-hint" class="menu-hint" aria-live="polite"></p>
       </nav>
       <aside class="stage-card">
-        <div class="stage-head"><small>STAGE 01</small><strong>오키나와 본섬</strong></div>
-        <canvas id="intro-map" aria-label="오키나와 본섬과 드라이브 목적지 지도"></canvas>
-        <span>6개 코스 · 예상 3–9분 · 주차까지 한 번에</span>
+        <div class="stage-head"><small>JAPAN DRIVE</small><strong>도쿄에서 오키나와까지</strong></div>
+        <canvas id="intro-map" aria-label="선택한 드라이브 코스 지도"></canvas>
+        <span>6개 지역 · 11개 코스 · 예상 3–9분</span>
       </aside>
       <footer class="title-footer">
         <div class="title-loading">
-          <p id="intro-status" role="status">오키나와 지도를 불러오는 중…</p>
+          <p id="intro-status" role="status">드라이브 코스를 불러오는 중…</p>
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.7</span>
+        <span class="title-version">TEST 0.8</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
@@ -157,7 +164,7 @@
           <button id="more" hidden>장소 더 불러오기</button>
         </div>
         <aside class="trip-panel" hidden>
-          <canvas id="overview" width="440" height="350" aria-label="오키나와 지도"></canvas>
+          <canvas id="overview" width="440" height="350" aria-label="선택한 코스 지도"></canvas>
           <div class="trip-details">
             <h2 id="review-course-title"></h2><p id="review-course-meta" class="review-course-meta"></p>
             <small>출발 준비</small

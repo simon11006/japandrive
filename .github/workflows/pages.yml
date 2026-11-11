@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   publish:
@@ -34,18 +34,22 @@ jobs:
       - name: Test
         run: node --test tests/*.test.mjs
       - name: Restore saved map data
+        if: github.event_name != 'push'
         uses: actions/cache/restore@v4
         with:
           path: data/service-cache
           key: map-pack-${{ github.run_id }}
           restore-keys: map-pack-
+      # Short courses are bundled. Pushes deploy immediately after tests;
+      # scheduled/manual runs refresh the optional legacy long-drive pack.
       # Downloads what is missing and refreshes anything older than 30 days.
       # Each run stops after 75 minutes; the next run continues.
       - name: Build offline map pack
+        if: github.event_name != 'push'
         continue-on-error: true
         run: node scripts/build-offline-pack.mjs --max-minutes 75 --refresh-days 30
       - name: Save map data
-        if: always()
+        if: always() && github.event_name != 'push'
         uses: actions/cache/save@v4
         with:
           path: data/service-cache

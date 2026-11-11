@@ -9,7 +9,8 @@ export function slippyPixel(lon, lat, z) {
     y: ((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n * 256,
   };
 }
-export async function loadTerrain(proj) {
+let tilePromise;
+async function loadTiles() {
   const tiles = new Map();
   let atlas = { tiles: [] };
   try {
@@ -47,6 +48,10 @@ export async function loadTerrain(proj) {
       } catch {}
     }),
   );
+  return tiles;
+}
+export async function loadTerrain(proj) {
+  const tiles=await (tilePromise??=loadTiles());
   const sample = (lon, lat, z) => {
     const p = slippyPixel(lon, lat, z),
       x = Math.floor(p.x / 256),

@@ -100,7 +100,7 @@ export function concreteTexture() {
 
 // Facade tile: one 3.6 m bay by one 3.1 m storey, matching the building
 // heights inferred from mapped storeys. Texture repeat is per metre.
-export function facadeTexture(wall = "#e6e2d4") {
+export function facadeTexture(wall = "#e6e2d4",style='standard') {
   const texture = canvas(256, (c, n) => {
     c.fillStyle = wall;
     c.fillRect(0, 0, n, n);
@@ -109,10 +109,10 @@ export function facadeTexture(wall = "#e6e2d4") {
     c.fillStyle = "#0000001a";
     c.fillRect(0, n * 0.9, n, n * 0.04);
     // Window with frame, glass reflection gradient and sill.
-    const x = n * 0.16,
-      y = n * 0.22,
-      w = n * 0.68,
-      h = n * 0.52;
+    const x = n * (style==='office'?.04:.16),
+      y = n * (style==='office'?.10:.22),
+      w = n * (style==='office'?.92:.68),
+      h = n * (style==='office'?.76:.52);
     c.fillStyle = "#8d918d";
     c.fillRect(x - 4, y - 4, w + 8, h + 8);
     const g = c.createLinearGradient(0, y, 0, y + h);

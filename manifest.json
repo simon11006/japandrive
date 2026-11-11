@@ -1,0 +1,12 @@
+{
+  "id": "./",
+  "name": "KEEP LEFT · 일본 운전 연습",
+  "short_name": "KEEP LEFT",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#071b25",
+  "theme_color": "#071b25",
+  "icons": [{"src":"app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+}

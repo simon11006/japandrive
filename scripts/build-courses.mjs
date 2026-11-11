@@ -1,16 +1,20 @@
 // Reproducible, offline course compiler. Map geometry stays at metre scale.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {buildGraph,localRoute} from '../local-router.mjs';
-import {HIGHWAYS} from '../map-core.mjs';
+import {HIGHWAYS,isSolidBuilding} from '../map-core.mjs';
 import {projection} from '../map-data.mjs';
+import {CITY_AREAS} from './city-areas.mjs';
+import {CITY_COURSES} from './city-course-definitions.mjs';
+import {buildRoadGraph,wrapAngle} from '../simulation.mjs';
 const read=async p=>JSON.parse(await readFile(p,'utf8'));
-const proj=projection([127.68,26.214]);
+let proj=projection([127.68,26.214]);
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const length=cs=>cs.slice(1).reduce((s,p,i)=>s+dist(proj.toLocal(p),proj.toLocal(cs[i])),0);
 const sources={};
-for(const id of ['naha','chatan','onna','motobu']) sources[id]=await read(`data/course-sources/${id}-geometry.json`);
+for(const id of ['naha','chatan','onna','motobu',...CITY_AREAS.map(c=>c.id)]) sources[id]=await read(`data/course-sources/${id}-geometry.json`);
 const training=await read('data/training-routes.json');
 const defs=[
+ ...CITY_COURSES,
  {id:'motobu-first',area:'motobu',name:'모토부 · 첫 드라이브',theme:'village',category:'교외',subtitle:'조용한 마을에서 시작하는 첫 좌측통행',stars:1,minutes:[3,4],pace:25,features:['좌측통행','완만한 좌회전','목적지 주차'],assessment:['낮은 교차로 밀도','2차로 중심','넓은 주차장'],startLabel:'모토부 숙소 앞',finishLabel:'하나사키 마르셰 주차장',training:'coast'},
  {id:'chatan-town',area:'chatan',name:'차탄 · 타운 드라이브',theme:'urban',category:'도심',subtitle:'상가와 생활도로 사이, 연속 신호를 읽다',stars:3,minutes:[5,7],pace:25,features:['연속 신호','횡단보도','우회전 대기','상가 주차'],assessment:['연속 교차로','보행자 신호','회전 후 차로 유지'],start:[127.7570,26.3220],end:[127.75862605,26.314982294],parkingId:189830737,startLabel:'차탄 생활도로',finishLabel:'차탄 공영 주차장'},
  {id:'naha-city',area:'naha',name:'나하 · 시티 챌린지',theme:'city',category:'복합 도심',subtitle:'빌딩과 상가 사이의 차로 선택과 교차로 통과',stars:5,minutes:[7,9],pace:23,features:['다차로 도로','방향 화살표 신호','연속 교차로','도심 주차'],assessment:['다차로·일방통행','교차로에서 차로 선택','대향차와 방향지시등 확인'],start:[127.6829856,26.2236442],via:[[127.690225,26.219627]],end:[127.692177345,26.219533545],parkingId:168251972,startLabel:'나하 도심 도로',finishLabel:'나하 도심 주차장'},
@@ -23,6 +27,7 @@ function nearest(p,cs){let best=Infinity;for(let i=1;i<cs.length;i++){const a=cs
 function routeSteps(cs){let travelled=0;const steps=[];for(let i=0;i<cs.length;i++){if(i)travelled+=dist(proj.toLocal(cs[i-1]),proj.toLocal(cs[i]));if(i===0||i===cs.length-1||i%12===0)steps.push({distance:0,name:'',maneuver:{type:i===0?'depart':i===cs.length-1?'arrive':'continue',modifier:'straight',location:cs[i]}});}return steps;}
 function rect(center,h,w,l){const f={x:Math.sin(h),y:-Math.cos(h)},r={x:Math.cos(h),y:Math.sin(h)};return [[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>proj.toGeo({x:center.x+r.x*a*w/2+f.x*b*l/2,y:center.y+r.y*a*w/2+f.y*b*l/2}));}
 for(const def of defs){
+ const city=CITY_AREAS.find(c=>c.id===def.area),origin=city?.origin||[127.68,26.214];proj=projection(origin);
  let raw,route,parking,tolls=[];
  if(def.training){
   route=structuredClone(training.routes.find(r=>r.name===def.training).data.routes[0]);
@@ -57,7 +62,7 @@ for(const def of defs){
   def.reconstructed=true;
  } else {
   raw=sources[def.area];
-  const ways=raw.elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway));
+  const ways=raw.elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway)&&(!city||(e.tags.tunnel!=='yes'&&!(Number(e.tags.layer)<0))));
   const graph=buildGraph(ways),points=[def.start,...def.via||[],def.end];let legs=[],coords=[],duration=0;
   for(let i=1;i<points.length;i++){
    const result=localRoute(graph,points[i-1],points[i]);if(!result)throw Error('Unconnected '+def.id);
@@ -70,11 +75,23 @@ for(const def of defs){
  const local=route.geometry.coordinates.map(proj.toLocal);
  const isNear=(e,r)=>e.geometry?e.geometry.some(p=>nearest(proj.toLocal([p.lon,p.lat]),local)<r):nearest(proj.toLocal([e.lon,e.lat]),local)<r;
  const elements=raw.elements.filter(e=>isNear(e,e.tags?.building?230:420));
- const roads=elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway)&&e.tags?.area!=='yes'&&!['no','private'].includes(e.tags?.access));
+ const roads=elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway)&&e.tags?.area!=='yes'&&!['no','private'].includes(e.tags?.access)&&(!city||(e.tags.tunnel!=='yes'&&!(Number(e.tags.layer)<0))));
  // Shared nodes supply crossing locations. Signals remain an explicitly
  // simulated training programme rather than a claim about local timings.
- const signals=elements.filter(e=>e.type==='node'&&e.tags?.highway==='traffic_signals'&&isNear(e,28)).map(e=>({...e}));
+ const signals=elements.filter(e=>e.type==='node'&&e.tags?.highway==='traffic_signals'&&isNear(e,180)).map(e=>({...e}));
  const crossing=elements.filter(e=>e.type==='node'&&e.tags?.highway==='crossing');
+ // Unmapped signals are never passed off as surveyed equipment. Add a
+ // training controller at real multi-road junctions, labelled in the bundle.
+ if(def.theme!=='expressway'){
+  const projected=roads.map(r=>({id:r.id,tags:r.tags,points:r.geometry.map(p=>proj.toLocal([p.lon,p.lat]))}));
+  const graph=buildRoadGraph(projected);
+  for(const node of graph.nodes.values()){
+   const directions=[];for(const e of node.out)if(!directions.some(h=>Math.abs(wrapAngle(h-e.heading))<.3))directions.push(e.heading);
+   if(directions.length<3||nearest(node,local)>24||!node.out.some(e=>['primary','secondary','tertiary'].includes(e.highway)))continue;
+   if(signals.some(s=>dist(node,proj.toLocal([s.lon,s.lat]))<55))continue;
+   const [lon,lat]=proj.toGeo(node);signals.push({type:'node',id:`practice-junction-${def.id}-${node.key}`,lon,lat,tags:{highway:'traffic_signals'},practice:true});
+  }
+ }
  if(!signals.length&&['city','urban','mountain'].includes(def.theme)){
   const at=route.geometry.coordinates[Math.floor(local.length*.47)];signals.push({type:'node',id:'practice-signal-'+def.id,lon:at[0],lat:at[1],tags:{highway:'traffic_signals'},practice:true});
  }
@@ -83,12 +100,12 @@ for(const def of defs){
  if(def.theme==='mountain'&&signals.length)signals[0].profile='flash';
  // Do not let duplicate nearby signal nodes produce contradictory phases.
  const merged=[];for(const s of signals){if(!merged.some(o=>dist(proj.toLocal([s.lon,s.lat]),proj.toLocal([o.lon,o.lat]))<55))merged.push(s);}
- const scene=elements.filter(e=>e.tags?.building||e.tags?.amenity==='parking'||e.tags?.natural||e.tags?.landuse||e.tags?.shop||e.tags?.barrier||e.tags?.power||e.tags?.highway==='footway'||e.tags?.highway==='street_lamp'||e.tags?.highway==='crossing'||e.tags?.waterway);
+ const scene=elements.filter(e=>isSolidBuilding(e)||e.tags?.amenity==='parking'||e.tags?.natural||e.tags?.landuse||e.tags?.leisure==='park'||e.tags?.shop||e.tags?.barrier||e.tags?.power||e.tags?.highway==='footway'||e.tags?.highway==='street_lamp'||e.tags?.highway==='crossing'||e.tags?.waterway);
  const rules=elements.filter(e=>e.type==='node'&&['stop','speed_camera'].includes(e.tags?.highway));
- const bundle={id:def.id,source:'OpenStreetMap contributors; saved route geometry',origin:[127.68,26.214],roads:{elements:roads},scene:{elements:scene},signals:merged,crossings:crossing,rules,route,parking,tolls};
- const minDriving=route.distance/(def.pace/3.6)/60+1.5+merged.length*.15+(tolls.length?1:0);
+ const bundle={id:def.id,source:'OpenStreetMap contributors; saved route geometry',origin,reference:city?.reference,roads:{elements:roads},scene:{elements:scene},signals:merged,crossings:crossing,rules,route,parking,tolls};
+ const minDriving=route.distance/(def.pace/3.6)/60+1.5+merged.filter(s=>isNear(s,28)).length*.15+(tolls.length?1:0);
  if(minDriving>10)throw Error(`${def.id} is too long: ${minDriving.toFixed(1)} min`);
- def.region='오키나와';def.distance=Math.round(route.distance);def.signals=merged.length;def.bundle=`./data/courses/${def.id}.json`;
+ def.region??='오키나와';def.origin=origin;def.reference=city?.reference;def.distance=Math.round(route.distance);def.signals=merged.length;def.bundle=`./data/courses/${def.id}.json`;
  def.preview=route.geometry.coordinates.filter((_,i)=>i%Math.max(1,Math.floor(local.length/80))===0);
  def.mapSource=`https://www.openstreetmap.org/#map=16/${route.geometry.coordinates[0][1]}/${route.geometry.coordinates[0][0]}`;
  await writeFile(`data/courses/${def.id}.json`,JSON.stringify(bundle));

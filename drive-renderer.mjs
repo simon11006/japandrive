@@ -1,4 +1,5 @@
 import { t } from "./i18n.mjs";
+import {prepareSignalLayouts,roadsideSpace} from "./junctions.mjs";
 import { pointInRing } from './map-data.mjs';
 import { buildCourseBuildings, buildCourseEnvironment, updateTollObjects } from './course-environment.mjs';
 import * as THREE from "./vendor/three.module.js";
@@ -7,7 +8,6 @@ import {
   signalPhase,
   signalRightArrow,
   forward,
-  synchronizeSignals,
   reverseGuides,
   nearestOnSegment,
   headingBetween,
@@ -673,7 +673,7 @@ export class DriveRenderer {
   setBuildings(features) {
     disposeGroup(this.buildingGroup);
     if (this.course) {
-      buildCourseBuildings(this,features,this.course.theme,this.courseRoads,this.course.nodes);
+      buildCourseBuildings(this,features,this.course.theme,this.courseRoads,this.course.nodes,this.course.style);
       return;
     }
     const roof = (this.roofMaterial ??= mat("#ffffff", 0.95, { map: this.textures.concrete }));
@@ -795,74 +795,47 @@ export class DriveRenderer {
   setSignals(signals, roads) {
     disposeGroup(this.signalGroup);
     this.signalHeads = [];
-    for (const s of signals) {
-      if (Math.hypot(s.x - this.base.x, s.y - this.base.y) > 1800) continue;
-      let nearest = { distance: Infinity, heading: 0 };
-      for (const r of roads)
-        for (let i = 1; i < r.points.length; i++) {
-          const p = r.points[i];
-          const d = Math.hypot(p.x - s.x, p.y - s.y);
-          if (d < nearest.distance)
-            nearest = {
-              distance: d,
-              heading: Math.atan2(p.x - r.points[i - 1].x, -(p.y - r.points[i - 1].y)),
-            };
+    prepareSignalLayouts(signals, roads);
+    const metal=mat("#747e7f",.4,{metalness:.5});
+    for(const s of signals){
+      const heads=[];
+      for(const approach of s.approaches){
+        const head=new THREE.Group();
+        head.position.copy(this.local(approach.head,5.2));
+        head.rotation.y=-approach.heading;
+        box(head,[1.35,.48,.30],[0,0,0],mat("#29383d"));
+        const bulbs=[];
+        for(const [i,color]of ["#32965b","#b59432","#933c39"].entries()){
+          const bulb=new THREE.Mesh(new THREE.CircleGeometry(.16,24),new THREE.MeshBasicMaterial({color}));
+          bulb.position.set(-.43+i*.43,0,.16);head.add(bulb);bulbs.push(bulb);
+          // Sun visors leave the lenses visible to an approaching driver.
+          box(head,[.35,.035,.20],[-.43+i*.43,.20,.22],metal);
         }
-      s.approachHeading = s.courseHeading ?? nearest.heading;
-      s.axis = s.approachHeading;
-      const group = new THREE.Group();
-      group.position.copy(this.local(s));
-      group.rotation.y = -s.axis;
-      const metal = mat("#747e7f", 0.4, { metalness: 0.5 });
-      cylinderBetween(group, [4, 0, 0], [4, 5.4, 0], 0.075, metal);
-      cylinderBetween(group, [4, 5.2, 0], [0.5, 5.2, 0], 0.055, metal);
-      const heads = [];
-      for (const turn of [0, Math.PI, Math.PI/2, -Math.PI/2]) {
-        const head = new THREE.Group();
-        head.rotation.y = turn;
-        head.position.set(0.5, 5.0, 0);
-        box(head, [1.15, 0.42, 0.28], [0, 0, 0], mat("#394b50"));
-        const bulbs = [];
-        for (const [i, color] of ["#32965b", "#b59432", "#933c39"].entries()) {
-          const bulb = new THREE.Mesh(
-            new THREE.CircleGeometry(0.135, 16),
-            new THREE.MeshBasicMaterial({ color }),
-          );
-          bulb.position.set(-0.37 + i * 0.37, 0, 0.151);
-          head.add(bulb);
-          bulbs.push(bulb);
-        }
-        group.add(head);
         let arrow;
         if(s.profile==='arrow'){
-          arrow=new THREE.Mesh(new THREE.PlaneGeometry(.46,.3),new THREE.MeshBasicMaterial({map:labelTexture('→','#55ffc2','#132a28'),transparent:false}));
-          arrow.position.set(.38,-.4,.16);head.add(arrow);
+          arrow=new THREE.Mesh(new THREE.PlaneGeometry(.5,.32),new THREE.MeshBasicMaterial({map:labelTexture('→','#55ffc2','#132a28')}));
+          arrow.position.set(.42,-.43,.16);head.add(arrow);
         }
-        const pedestrian=new THREE.Mesh(new THREE.PlaneGeometry(.22,.45),new THREE.MeshBasicMaterial({map:labelTexture('人','#dbf0da','#172624')}));
-        pedestrian.position.set(3.1,-2.5,.1);head.add(pedestrian);
-        heads.push({bulbs,arrow,pedestrian,heading:s.axis-turn});
+        const pedestrian=new THREE.Mesh(new THREE.PlaneGeometry(.24,.48),new THREE.MeshBasicMaterial({map:labelTexture('人','#dbf0da','#172624')}));
+        // Pedestrian unit belongs on the roadside support, not in the lane.
+        if(approach.pole){
+          const foot=this.local(approach.pole),top=this.local(approach.pole,5.6),end=this.local(approach.head,5.6);
+          cylinderBetween(this.signalGroup,foot.toArray(),top.toArray(),.09,metal);
+          cylinderBetween(this.signalGroup,top.toArray(),end.toArray(),.065,metal);
+          cylinderBetween(this.signalGroup,end.toArray(),this.local(approach.head,5.2).toArray(),.05,metal);
+          pedestrian.position.copy(this.local(approach.pole,2.4));pedestrian.rotation.y=-approach.heading;this.signalGroup.add(pedestrian);
+        }
+        this.signalGroup.add(head);
+        heads.push({bulbs,arrow,pedestrian,heading:approach.heading});
+        const f=forward(approach.heading),r={x:Math.cos(approach.heading),y:Math.sin(approach.heading)},half=approach.width/2;
+        const left=-half+.2,right=approach.oneway?half-.2:-.1;
+        const polygon=[[left,-.17],[right,-.17],[right,.17],[left,.17]].map(([x,y])=>({x:approach.stop.x+r.x*x+f.x*y,y:approach.stop.y+r.y*x+f.y*y}));
+        const positions=this.surface.drape(polygon,.18).flatMap(p=>[p.x-this.base.x,p.height,p.y-this.base.y]);
+        const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.computeVertexNormals();
+        this.signalGroup.add(new THREE.Mesh(geometry,mat('#f3f0df')));
       }
-      this.signalGroup.add(group);
-      this.signalHeads.push({ signal: s, heads });
-      // Stop line on each approach, at the mapped signal location.
-      const stopPolygon = [
-        [-3.15, 4.86],
-        [-0.05, 4.86],
-        [-0.05, 5.14],
-        [-3.15, 5.14],
-      ].map(([x, z]) => ({
-        x: s.x + x * Math.cos(s.axis) - z * Math.sin(s.axis),
-        y: s.y + x * Math.sin(s.axis) + z * Math.cos(s.axis),
-      }));
-      const stopPositions = this.surface
-          .drape(stopPolygon, 0.17)
-          .flatMap((p) => [p.x - this.base.x, p.height, p.y - this.base.y]),
-        stopGeometry = new THREE.BufferGeometry();
-      stopGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stopPositions, 3));
-      stopGeometry.computeVertexNormals();
-      this.signalGroup.add(new THREE.Mesh(stopGeometry, mat("#f3f0df")));
+      this.signalHeads.push({signal:s,heads});
     }
-    synchronizeSignals(signals);
   }
   setCar(car) {
     if (this.lastCar === car.id) return;
@@ -906,6 +879,7 @@ export class DriveRenderer {
     if (this.ruleSignature === signature) return;
     this.ruleSignature = signature;
     disposeGroup(this.ruleGroup);
+    const clear=roadsideSpace(roads);
     for (const rule of records) {
       if (Math.hypot(rule.x - focus.x, rule.y - focus.y) > 2100) continue;
       let best = { distance: Infinity, heading: 0 };
@@ -916,8 +890,16 @@ export class DriveRenderer {
             best = { ...match, heading: headingBetween(road.points[i - 1], road.points[i]), road };
         }
       if (best.distance > 16) continue;
+      const r={x:Math.cos(best.heading),y:Math.sin(best.heading)},f=forward(best.heading),side=rule.tags.highway==='speed_camera'?1:-1;
+      let support;
+      for(const extra of [0,3,6,10,16])for(const along of [0,-6,6,-12,12]){
+        const p={x:best.point.x+r.x*side*(roadWidth(best.road.tags)/2+1.2+extra)+f.x*along,y:best.point.y+r.y*side*(roadWidth(best.road.tags)/2+1.2+extra)+f.y*along};
+        if(!support&&clear(p,.9))support=p;
+      }
+      if(!support)continue;
+      const legacyOffset=side>0?3.8:-3.7;
       const group = new THREE.Group();
-      group.position.copy(this.local(rule));
+      group.position.copy(this.local({x:support.x-r.x*legacyOffset,y:support.y-r.y*legacyOffset}));
       group.rotation.y = -best.heading;
       this.ruleGroup.add(group);
       const pole = mat("#9aaba9", 0.5, { metalness: 0.35 });

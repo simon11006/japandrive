@@ -53,7 +53,7 @@ export function drawCourseMap(canvas,course,bundle){
  const dpr=Math.min(globalThis.devicePixelRatio||1,2),w=canvas.clientWidth||640,h=canvas.clientHeight||300;
  canvas.width=w*dpr;canvas.height=h*dpr;const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
  c.fillStyle='#102a31';c.fillRect(0,0,w,h);if(!course?.preview?.length)return;
- const cosine=Math.cos(26.214*Math.PI/180),pts=course.preview.map(([lon,lat])=>({x:lon*cosine,y:-lat}));
+ const cosine=Math.cos((course.origin?.[1]??course.preview[0][1])*Math.PI/180),pts=course.preview.map(([lon,lat])=>({x:lon*cosine,y:-lat}));
  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;
  const scale=Math.min((w-100)/(Math.max(...xs)-Math.min(...xs)||.001),(h-100)/(Math.max(...ys)-Math.min(...ys)||.001));
  const local=([lon,lat])=>({x:w/2+(lon*cosine-cx)*scale,y:h/2+(-lat-cy)*scale});
