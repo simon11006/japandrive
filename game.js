@@ -26,6 +26,8 @@ import {
   VIOLATIONS,
 } from "./driving-rules.mjs";
 import { DriveAudio } from "./audio.mjs";
+import { COURSE_STEPS, canVisitStep, courseTime, stars, courseRoadStore, courseParking, drawCourseMap, TollSession } from './courses.mjs';
+import {courseElevation} from './course-surface.mjs';
 import {
   TrafficSimulation,
   DIFFICULTIES,
@@ -37,6 +39,7 @@ import {
   blocksMove,
   nearestOnSegment,
   signalPhase,
+  signalRightArrow,
   forward,
   headingBetween,
   distance,
@@ -154,6 +157,17 @@ let roadRules = [],
   stopHistory = new Map(),
   passedCameras = new Set(),
   warningUntil = 0;
+let courses=[], selectedCourse=null, courseBundle=null, courseFilter='all', courseTerrain={courses:{}}, tollSession=null, tollAction=false;
+let lastWallContact=null;
+const courseCache=new Map();
+const touchDisplay=matchMedia('(any-pointer: coarse)');
+function refreshDriveLayout(){
+  document.body.dataset.driveLayout=(touchDisplay.matches||innerWidth<=1100)
+    ? (innerWidth/innerHeight<.85?'portrait':'landscape') : 'desktop';
+}
+window.addEventListener('resize',refreshDriveLayout);
+touchDisplay.addEventListener('change',refreshDriveLayout);
+refreshDriveLayout();
 try {
   difficulty = DIFFICULTIES.find((d) => d.id === localStorage.getItem("drive-difficulty")) || difficulty;
 } catch {}
@@ -734,34 +748,125 @@ window.addEventListener("pointerup", () => {
   setTimeout(() => (carouselDrag = false), 0);
 });
 
-const wizardLabels = ["지역", "차량", "출발지", "목적지", "교통량", "출발 확인"];
+const wizardLabels = COURSE_STEPS;
+async function loadCourses(){
+  const [catalog,terrain]=await Promise.all([json('./data/driving-courses.json'),json('./data/course-terrain.json').catch(()=>({courses:{}}))]);
+  courses=catalog.courses;courseTerrain=terrain;
+  const order=['chatan-town','naha-city','motobu-first','onna-coast','motobu-hills','e58-express'];
+  courses.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  maxReachedStep=1;
+  renderCourses();
+  await chooseCourse(courses[0]);
+  if(selectedCourse.id===courses[0].id&&courseBundle){
+    prepareCourseWorld();
+    active=false;intro=true;speed=0;
+    $('#loading').textContent='';
+  }
+}
+function renderCourses(){
+  const visible=courses.filter(c=>courseFilter==='all'||(courseFilter==='city'&&['city','urban'].includes(c.theme))||(courseFilter==='nature'&&['coast','mountain'].includes(c.theme))||(courseFilter==='beginner'&&c.stars===1)||courseFilter===c.theme);
+  $('#course-cards').replaceChildren(...visible.map((c,i)=>{
+    const button=document.createElement('button');button.className=`course-card theme-${c.theme}${selectedCourse?.id===c.id?' selected':''}`;button.dataset.course=c.id;button.setAttribute('aria-pressed',String(selectedCourse?.id===c.id));
+    const picture=document.createElement('div');picture.className='course-picture';
+    const canvas=document.createElement('canvas');canvas.setAttribute('aria-hidden','true');picture.append(canvas);
+    const over=document.createElement('span');over.className='course-kicker';over.textContent=`${c.region} / ${c.category}`;picture.append(over);
+    const no=document.createElement('b');no.className='course-number';no.textContent=String(courses.indexOf(c)+1).padStart(2,'0');picture.append(no);
+    const body=document.createElement('div');body.className='course-card-body';
+    const title=document.createElement('h2');title.textContent=c.name;const copy=document.createElement('p');copy.textContent=c.subtitle;
+    const meta=document.createElement('div');meta.className='course-meta';const time=document.createElement('strong');time.textContent=`${courseTime(c)}`;const rating=document.createElement('span');rating.className='course-stars';rating.textContent=stars(c);rating.setAttribute('aria-label',`난이도 5단계 중 ${c.stars}단계`);meta.append(time,rating);
+    const tags=document.createElement('div');tags.className='course-tags';for(const feature of c.features){const tag=document.createElement('span');tag.textContent=feature;tags.append(tag);}
+    const footer=document.createElement('small');footer.textContent=`${distanceText(c.distance)} · 주차 포함`;
+    body.append(meta,title,copy,tags,footer);button.append(picture,body);button.onclick=()=>chooseCourse(c);
+    requestAnimationFrame(()=>drawCourseMap(canvas,c,courseCache.get(c.id)));return button;
+  }));
+  updateCourseSelection();
+}
+function updateCourseSelection(){
+  for(const button of $('#course-cards').children){
+    const chosen=button.dataset.course===selectedCourse?.id;
+    button.classList.toggle('selected',chosen);button.setAttribute('aria-pressed',String(chosen));
+    if(chosen&&courseBundle){const course=selectedCourse,bundle=courseBundle;requestAnimationFrame(()=>drawCourseMap(button.querySelector('canvas'),course,bundle));}
+  }
+  const detail=$('#course-detail');detail.replaceChildren();if(!selectedCourse)return;
+  const text=document.createElement('div');const strong=document.createElement('strong');strong.textContent=`선택한 코스 · ${selectedCourse.name}`;const p=document.createElement('p');p.textContent=selectedCourse.assessment.join(' · ');text.append(strong,p);
+  const note=document.createElement('span');note.textContent=selectedCourse.reconstructed?'실제 E58 선형 참고 · 진입·출구를 연습용으로 구성':'실제 도로·건물 배치 참고 · 신호와 교통은 연습용';detail.append(text,note);
+}
+async function chooseCourse(c){
+  if(busy)cancelDrivePreparation();selectedCourse=c;courseBundle=null;updateCourseSelection();updateStart();
+  $('#loading').textContent='선택한 코스의 도로와 주차장을 불러오는 중…';
+  try{
+    const bundle=courseCache.get(c.id)||await json(c.bundle);courseCache.set(c.id,bundle);
+    if(selectedCourse.id!==c.id)return;
+    courseBundle=bundle;
+    const start=bundle.route.geometry.coordinates[0],end=bundle.route.geometry.coordinates.at(-1);
+    departure={id:c.id+'-start',name:c.startLabel,lon:start[0],lat:start[1],resolved:true};
+    selected={id:c.id+'-finish',name:c.finishLabel,lon:end[0],lat:end[1],resolved:true};
+    $('#chosen').textContent=selected.name;$('#trip-status').className='muted';$('#trip-status').textContent='코스 준비 완료 · 신호를 지키며 목적지에 도착해 주차하세요.';$('#quick-test').hidden=true;
+    $('#loading').textContent='';updateCourseSelection();updateStart();drawOverview();
+  }catch(error){if(selectedCourse.id===c.id)$('#loading').textContent='코스를 불러오지 못했습니다. 카드를 눌러 다시 시도해 주세요.';}
+}
+for(const b of document.querySelectorAll('#course-filters button'))b.onclick=()=>{courseFilter=b.dataset.filter;for(const button of document.querySelectorAll('#course-filters button'))button.setAttribute('aria-pressed',String(button===b));renderCourses();};
+for(const [id,direction]of [['#course-prev',-1],['#course-next',1]])$(id).onclick=()=>$('#course-cards').scrollBy({left:direction*($('#course-cards').clientWidth*.8),behavior:'smooth'});
+function prepareCourseWorld(){
+  // Courses already contain their scenery; keep long-drive streaming separate.
+  buildings=null;
+  const bundle=courseBundle;store=courseRoadStore(bundle,proj);routeInfo=bundle.route;route=routeInfo.geometry.coordinates.map(proj.toLocal);
+  features=sceneFeatures({elements:bundle.scene.elements.filter(e=>e.tags?.building||e.tags?.amenity==='parking'||e.tags?.natural||e.tags?.landuse)},proj);
+  parkingGoal=courseParking(bundle.parking,proj);bays=[parkingGoal];
+  const nodes=bundle.scene.elements.filter(e=>e.type==='node').map(e=>({...e,...proj.toLocal([e.lon,e.lat])}));
+  signalRecords=bundle.signals.map(e=>{const p=proj.toLocal([e.lon,e.lat]);let best={distance:Infinity,heading:0};for(let i=1;i<route.length;i++){const m=nearestOnSegment(p,route[i-1],route[i]);if(m.distance<best.distance)best={...m,heading:headingBetween(route[i-1],route[i])};}return {...e,...p,courseHeading:best.heading};});signals=signalRecords;
+  roadRules=bundle.rules.map(e=>({...e,...proj.toLocal([e.lon,e.lat])}));
+  steps=routeInfo.legs.flatMap(l=>l.steps).filter((s,i,a)=>s.maneuver.type!=='arrive'||i===a.length-1).map(s=>{const point=proj.toLocal(s.maneuver.location);return {...s,point,atDistance:routeProgress(route,point,routeInfo.distance).travelled};});
+  resetPosition();
+  const mode=document.querySelector('[name="toll-mode"]:checked').value;
+  tollSession=new TollSession(bundle.tolls.map(g=>({...g,...proj.toLocal(g.geo),mode})),mode);
+  const graded=courseElevation(elevation,store.roads,tollSession.gates,parkingGoal);
+  driver?.setup({base:pos,roads:store.roads,features,coast,elevation:graded,signals,bays,car,projection:proj,
+    course:{theme:selectedCourse.theme,nodes,route,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
+  driver?.setRoadRules(roadRules,store.roads);
+  traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
+}
+async function startCourse(){
+  if(!courseBundle||busy)return;
+  sound.start();busy=true;updateStart();$('#start').textContent='운전석을 준비하는 중…';
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  try{
+    prepareCourseWorld();trainingMode='drive';roadError='';done=false;paused=false;rear=false;active=true;intro=false;navZoom=false;parkedSeconds=0;simulationTime=0;lastCollision=-10;lastSignalViolation=-10;feedbackUntil=0;keys.clear();scoreCard=new DrivingScore();drivenDistance=0;stopHistory.clear();passedCameras.clear();checkedTurns.clear();warningUntil=0;tollAction=false;
+    $('#violation-warning').hidden=true;$('#driving-car').textContent=`${car.name} · 우핸들`;$('#destination').textContent=selected.name;
+    for(const id of ['#nav','#hud','#hint','#menu'])$(id).hidden=false;
+    for(const id of ['#select','#result','#splash'])$(id).hidden=true;
+    setTitle(false);document.body.classList.remove('in-menu');document.body.classList.add('driving');window.scrollTo(0,0);
+    $('#course-drive-name').textContent=selectedCourse.name;
+  }catch(error){$('#trip-status').textContent='코스를 준비하지 못했습니다. '+error.message;$('#trip-status').className='muted error';}
+  finally{busy=false;$('#start').textContent='운전 시작';updateStart();}
+}
+$('#toll-action').onclick=()=>{tollAction=true;};
+window.addEventListener('keydown',e=>{if(e.key==='Enter'&&active&&!paused&&!done&&!$('#toll-prompt').hidden){e.preventDefault();tollAction=true;}});
 const wizardTitles = [
-  "어디로 떠날까요?",
+  "오늘의 드라이브를 고르세요.",
   "함께 달릴 차량은?",
-  "어디에서 출발할까요?",
-  "어디까지 달려볼까요?",
-  "어떤 도로에서 연습할까요?",
+  "교통량을 맞춰 보세요.",
   "이제 출발할 준비가 됐어요.",
 ];
 const wizardDescriptions = [
-  "달리고 싶은 지역부터 골라 주세요.",
+  "별점과 예상 시간, 코스의 특징을 확인하세요. 도착 후 주차까지 이어집니다.",
   "두 차량의 크기와 회전 반경 차이를 익혀 보세요.",
-  "카드를 옆으로 넘겨 출발할 장소를 선택하세요.",
-  "숙소·식당·관광지를 고르면 목적지 주차장으로 안내합니다.",
-  "교통량을 세 단계로 조절할 수 있습니다.",
+  "여유로운 도로부터 차량이 많은 도심까지, 세 단계로 조절합니다.",
   "선택한 코스를 확인하고 천천히 출발하세요.",
 ];
 function showWizardStep(step, focus = true) {
   if (busy && step !== wizardStep) cancelDrivePreparation();
-  wizardStep = Math.max(1, Math.min(6, step));
+  wizardStep = Math.max(1, Math.min(4, step));
   $("#select").dataset.step = wizardStep;
-  $("#regions").hidden = wizardStep !== 1;
+  $("#regions").hidden = true;
+  $("#course-panel").hidden = wizardStep !== 1;
   $(".vehicle-section").hidden = wizardStep !== 2;
-  $("#planner").hidden = ![3, 4, 6].includes(wizardStep) || !regionReady;
-  $(".places-panel").hidden = ![3, 4].includes(wizardStep);
-  $(".trip-panel").hidden = wizardStep !== 6;
-  $("#difficulty-panel").hidden = wizardStep !== 5;
-  $("#step-caption").textContent = `STEP ${wizardStep} / 6 · ${wizardLabels[wizardStep - 1]}`;
+  $("#planner").hidden = wizardStep !== 4;
+  $(".places-panel").hidden = true;
+  $(".trip-panel").hidden = wizardStep !== 4;
+  $("#difficulty-panel").hidden = wizardStep !== 3;
+  $("#toll-options").hidden = selectedCourse?.theme !== 'expressway';
+  $("#step-caption").textContent = `STEP ${wizardStep} / 4 · ${wizardLabels[wizardStep - 1]}`;
   $("#step-title").textContent = wizardTitles[wizardStep - 1];
   // Replay the sign-plate entrance and a menu sound on every step change.
   $("#step-title").style.animation = "none";
@@ -781,7 +886,7 @@ function showWizardStep(step, focus = true) {
       label.textContent = name;
       button.append(number, label);
       button.dataset.step = i + 1;
-      button.disabled = i + 1 > maxReachedStep;
+      button.disabled = !canVisitStep(i+1,maxReachedStep);
       button.setAttribute(
         "aria-label",
         `${i + 1}단계 ${name}${button.disabled ? " · 이전 단계를 먼저 완료하세요" : ""}`,
@@ -792,41 +897,33 @@ function showWizardStep(step, focus = true) {
       return li;
     }),
   );
-  if (wizardStep === 3 || wizardStep === 4) {
-    placeRole = wizardStep === 3 ? "departure" : "destination";
-    pageSize = 24;
-    renderPlaces();
-  }
-  if (wizardStep === 5) renderDifficulties();
+  if (wizardStep === 3) renderDifficulties();
   updateWizard();
   drawOverview();
   if (focus) {
     $("#step-title").focus({ preventScroll: true });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    $("#select").scrollTo({ top: 0, behavior: "instant" });
   }
 }
 function updateWizard() {
   for (const b of document.querySelectorAll("#step-progress button"))
     b.disabled = Number(b.dataset.step) > maxReachedStep;
   const labels = [
-    region?.name,
+    selectedCourse?.name,
     car.name,
-    departure?.name,
-    selected?.name,
-    difficulty.name,
+    difficulty.description,
     "안전하게 출발하세요",
   ];
   $("#step-selection").textContent = labels[wizardStep - 1] || "선택해 주세요";
   $("#step-back").textContent = wizardStep === 1 ? "← 타이틀" : "← 이전";
-  $("#step-next").hidden = wizardStep === 6;
+  $("#step-next").hidden = wizardStep === 4;
   $("#step-next").textContent = `${wizardLabels[wizardStep] || "출발"} →`;
   $("#step-next").disabled =
-    !regionReady ||
-    busy ||
-    (wizardStep === 3 && (!departure || departure.resolved === false)) ||
-    (wizardStep === 4 && (!selected || selected.resolved === false || selected.id === departure?.id));
+    !regionReady || busy || !selectedCourse || !courseBundle;
   $("#departure-name").textContent = departure?.name || "출발지를 선택하세요";
   $("#drive-summary").textContent = `${car.name} · ${difficulty.name} · ${difficulty.description}`;
+  $("#review-course-title").textContent=selectedCourse?.name||'';
+  $("#review-course-meta").textContent=selectedCourse?`${selectedCourse.region} · ${stars(selectedCourse)} · 예상 ${courseTime(selectedCourse)} · 주차 포함`:'';
 }
 $("#step-back").onclick = () => (wizardStep === 1 ? returnToTitle() : showWizardStep(wizardStep - 1));
 $("#step-next").onclick = () => {
@@ -898,6 +995,7 @@ function renderDifficulties() {
 }
 
 function updateStart() {
+  if(selectedCourse){$("#start").disabled=busy||!courseBundle;updateWizard();return;}
   $("#start").disabled =
     busy || !departure || !selected || selected.resolved === false || selected.id === departure.id;
   if (selected?.id === departure?.id) $("#trip-status").textContent = "출발지와 다른 목적지를 선택해 주세요.";
@@ -932,6 +1030,7 @@ $("#quick-test").onclick = () => {
 };
 
 function drawOverview() {
+  if(selectedCourse){drawCourseMap(overview,selectedCourse,courseBundle);return;}
   const w = overview.clientWidth || 440,
     h = overview.clientHeight || 350,
     dpr = Math.min(devicePixelRatio, 2);
@@ -1091,6 +1190,7 @@ function drawIntroMap() {
 
 $("#start").onclick = async () => {
   if ($("#start").disabled) return;
+  if(selectedCourse)return startCourse();
   sound.start();
   const attempt = ++driveAttempt;
   driveAbort = new AbortController();
@@ -1257,6 +1357,10 @@ $("#start").onclick = async () => {
 
 function resetPosition() {
   if (!route.length) return;
+  lastWallContact=null;
+  tollSession?.reset();
+  tollAction=false;
+  $('#toll-prompt').hidden=true;
   pos = { ...route[0] };
   speed = 0;
   gear = 1;
@@ -1268,7 +1372,7 @@ function resetPosition() {
   lastRoadCheck = 0;
   // Start in the left travel lane on two-way roads, not on the centreline.
   const lane = nearestRoad(pos);
-  if (lane && lane.road.tags.highway !== "service" && !["yes", "1", "-1"].includes(lane.road.tags.oneway)) {
+  if (lane && (lane.road.tags.highway !== "service" || Number(lane.road.tags.lanes)>=2) && !["yes", "1", "-1"].includes(lane.road.tags.oneway)) {
     pos.x -= Math.cos(heading) * 1.5;
     pos.y -= Math.sin(heading) * 1.5;
   }
@@ -1294,8 +1398,8 @@ $("#menu").onclick = () => {
   $("#result").hidden = true;
   document.body.classList.remove("driving");
   document.body.classList.add("in-menu");
-  maxReachedStep = 6;
-  showWizardStep(4);
+  maxReachedStep = 4;
+  showWizardStep(1);
   drawOverview();
 };
 window.addEventListener("keydown", (e) => {
@@ -1405,7 +1509,7 @@ function drawMap(context, width, height, scale) {
 
 let buildingBusy = false;
 async function updateBuildings(current) {
-  if (!buildings || buildingBusy || !active) return;
+  if (selectedCourse || !buildings || buildingBusy || !active) return;
   buildingBusy = true;
   try {
     if ((await buildings.ensure(pos)) && current === session && active) {
@@ -1419,6 +1523,7 @@ async function updateBuildings(current) {
   }
 }
 async function updateRoads() {
+  if(selectedCourse){traffic?.recenter(store.roads.filter(r=>!r.id.startsWith('practice-')),pos);return;}
   if (roadBusy || !active) return;
   roadBusy = true;
   const current = session;
@@ -1448,6 +1553,10 @@ async function updateRoads() {
 function hud() {
   const progress = routeProgress(route, pos, routeInfo?.distance),
     d = Math.hypot(route.at(-1).x - pos.x, route.at(-1).y - pos.y);
+  if(selectedCourse){
+    $('#course-drive-time').textContent=`${Math.floor(simulationTime/60)}:${String(Math.floor(simulationTime%60)).padStart(2,'0')} / 예상 ${courseTime(selectedCourse)}`;
+    $('#course-drive-stage').textContent=progress.remaining<80?'목적지 주차장에 들어가 주차하세요':`${Math.round(progress.travelled/routeInfo.distance*100)}% · 내비게이션을 따라 주행`;
+  }
   $("#speed").textContent = Math.round(speed * 3.6);
   $("#gear").textContent = gear > 0 ? "D" : "R";
   $("#remaining").textContent = distanceText(progress.remaining);
@@ -1516,14 +1625,15 @@ function hud() {
     parkingDistance: toPark,
   };
   $("#road-status").textContent = roadError || (roadBusy ? "주변 길을 불러오는 중" : "안전거리를 유지하세요");
+  const touchUI=document.body.dataset.driveLayout!=='desktop';
   $("#hint").textContent = done
     ? "주차 완료 · 다음 드라이브를 선택하세요"
     : paused
-      ? "일시정지 · Esc로 계속"
+      ? (touchUI?"일시정지 · 계속 운전을 눌러 돌아가세요":"일시정지 · Esc로 계속")
       : parkingBrake && toPark >= 65
-        ? "주차 브레이크가 걸려 있습니다 · S로 브레이크를 밟은 채 B로 해제하세요"
+        ? (touchUI?"제동을 누른 채 ‘주차’ 버튼을 눌러 출발하세요.":"주차 브레이크가 걸려 있습니다 · S로 브레이크를 밟은 채 B로 해제하세요")
         : simulationTime < 7
-        ? "W 가속 · S 제동 · A/D 조향 · Z/X 방향지시등 · Q/E 미러 확인"
+        ? (touchUI?"양쪽 버튼으로 조향·가속·제동하세요. 회전 전에는 깜빡이를 켜세요.":"W 가속 · S 제동 · A/D 조향 · Z/X 방향지시등 · Q/E 미러 확인")
         : feedbackUntil > simulationTime
           ? feedback
           : toPark < 65
@@ -1531,11 +1641,11 @@ function hud() {
               ? "주차 브레이크 작동 · 잠시 정차를 유지하세요"
               : status.inside
                 ? status.aligned
-                  ? "정차한 뒤 B로 주차 브레이크를 걸어 주세요."
+                  ? (touchUI?"정차한 뒤 ‘주차’ 버튼으로 주차 브레이크를 걸어 주세요.":"정차한 뒤 B로 주차 브레이크를 걸어 주세요.")
                   : "차체를 주차선과 나란히 맞춰 주세요."
                 : "차량 전체가 주차 구역 안에 들어가야 합니다."
             : parkingBrake
-              ? "주차 브레이크가 걸려 있습니다 · B로 해제"
+              ? (touchUI?"‘주차’ 버튼으로 주차 브레이크를 해제하세요.":"주차 브레이크가 걸려 있습니다 · B로 해제")
               : "왼쪽 차선으로 달리고, 교차로에서는 신호와 주변 차량을 확인하세요.";
   $("#telemetry").textContent =
     `${car.name} · ${trainingMode === "parking" ? "주차 연습" : "드라이브"} · ${Math.round(speed * 3.6)}km/h · ${gear > 0 ? "D" : "R"} · ${status.inside ? "주차면 안" : "주차면 밖"} · ${parkingBrake ? "주차 브레이크 작동" : "주차 브레이크 해제"}`;
@@ -1581,8 +1691,8 @@ function hud() {
   $("#gear-state").textContent = parkingBrake
     ? "주차 브레이크 작동"
     : gear < 0
-      ? "R 후진 · W 가속 / S 제동"
-      : "D 전진 · W 가속 / S 제동";
+      ? (touchUI?"R 후진 · 후방카메라 확인":"R 후진 · W 가속 / S 제동")
+      : (touchUI?"D 전진 · 페달로 속도 조절":"D 전진 · W 가속 / S 제동");
   if (nearbySignal && nearbySignal.ahead < 45 && signalColor === "red" && !done && !paused)
     $("#hint").textContent = "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
 }
@@ -2001,7 +2111,7 @@ window.addEventListener("keydown", (e) => {
   if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.key === "Enter" && e.target === document.body) {
     e.preventDefault();
-    if (wizardStep === 6) $("#start").click();
+    if (wizardStep === 4) $("#start").click();
     else if (!$("#step-next").disabled) $("#step-next").click();
   } else if (e.key === "Escape") {
     e.preventDefault();
@@ -2025,15 +2135,15 @@ $("#play").onclick = () => {
   showWizardStep(1);
 };
 // Quick drive: the stored real route from the Motobu hotel to Kaihoumaru.
-$("#quick-play").onclick = () => {
-  if (!regionReady || !region?.island) {
+$("#quick-play").onclick = async () => {
+  if (!regionReady || !region?.island || !courses.length) {
     $("#menu-hint").textContent = "지도를 불러오는 중입니다. 잠시 후 다시 선택해 주세요.";
     return;
   }
   openWizard();
-  maxReachedStep = 6;
-  showWizardStep(6);
-  $("#quick-test").click();
+  await chooseCourse(courses.find(c=>c.id==='motobu-first'));
+  maxReachedStep = 4;
+  showWizardStep(4);
   $("#start").click();
 };
 $("#title-view").onclick = () => showViewSettings();
@@ -2207,6 +2317,8 @@ function frameBody(t) {
     $("#violation-warning").hidden = true;
     $("#camera-warning").hidden = true;
   }
+  $('#course-drive-status').hidden=!active||done||!selectedCourse;
+  if(!active||done||paused)$('#toll-prompt').hidden=true;
   if (active) {
     if (!paused && !done && (store.hasCoverage(pos, 80) || trainingMode === "parking")) {
       simulationTime += dt;
@@ -2234,6 +2346,12 @@ function frameBody(t) {
       speed = trainingMode === "parking" ? Math.min(2.8, state.speed) : state.speed;
       heading = state.heading;
       steer = state.steer;
+      if(tollSession){
+        const toll=tollSession.update(dt,{...pos,heading,speed,length:car.length},tollAction);tollAction=false;
+        $('#toll-prompt').hidden=!toll.message;$('#toll-prompt span').textContent=toll.message;$('#toll-action').hidden=tollSession.mode==='etc';
+        if(toll.blocked){pos={x:previous.x,y:previous.y};speed=0;if(toll.violation)coach('차단기 앞에서 정차하세요. 통과 절차를 완료하면 열립니다.');}
+        if(traffic)traffic.barriers=tollSession.gates.filter(g=>g.opening<.86&&g.state!=='passed').map(g=>({...g,heading:g.heading,length:1,width:6,speed:0,barrier:true}));
+      }
       // Self-cancelling blinker: once the wheel has turned the signalled way
       // and comes back near centre, the stalk returns.
       const limit = steeringLimit(car);
@@ -2250,16 +2368,19 @@ function frameBody(t) {
         const before = vehicleCorners(previous, car).some((p) => hitsBuilding(wall, p));
         if (blocksMove(previous, pos, wall.center, before)) {
           pos = { x: previous.x, y: previous.y };
-          if (!before) {
+          // Count one impact while creep keeps pressing into the same wall.
+          if (!before && (!lastWallContact || distance(pos,lastWallContact)>1.5)) {
             sound.thud();
             warnViolation(
               scoreCard.add("collision", simulationTime),
               "시설물과 접촉했습니다. 후진해서 간격을 확보하세요.",
             );
+            lastWallContact={...pos};
           }
           speed = 0;
         }
       }
+      if(lastWallContact && distance(pos,lastWallContact)>1.5)lastWallContact=null;
       if (trainingMode !== "parking" && simulationTime % 1 < dt) {
         const lane = nearestRoad(pos),
           inLot = visibleFeatures.some((f) => f.tags.amenity === "parking" && insidePolygon(pos, f.points));
@@ -2292,11 +2413,15 @@ function frameBody(t) {
           a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - 5,
           b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - 5,
           l = Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x);
+        const phase=signalPhase(s,heading,simulationTime);
+        if(phase==='flash-red'&&b>0&&b<12&&speed<.1)stopHistory.set('flash-'+s.id,true);
+        const upcoming=steps.find(step=>step.atDistance>routeProgress(route,pos,routeInfo.distance).travelled-6&&step.maneuver.type==='turn');
+        const arrowAllowed=blinker===1&&signalRightArrow(s,heading,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
         if (
           a > 0 &&
           b <= 0 &&
           l < 5 &&
-          signalPhase(s, heading, simulationTime) === "red" &&
+          ((phase === "red"&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+s.id))) &&
           simulationTime - lastSignalViolation > 3
         ) {
           warnViolation(scoreCard.add("red", simulationTime), "빨간 신호에서는 정지선 앞에 멈춰 주세요.");
@@ -2311,7 +2436,8 @@ function frameBody(t) {
       }
       const status = parkingStatus({ ...pos, heading, speed, parkingBrake }, car, parkingGoal, parkedSeconds);
       parkedSeconds = status.ready ? parkedSeconds + dt : 0;
-      if (status.complete) completeParking();
+      if (status.complete && (!tollSession||tollSession.complete)) completeParking();
+      else if(status.complete)coach('입구와 출구 요금소 절차를 완료한 뒤 주차해 주세요.');
     } else if (!store.hasCoverage(pos, 80)) speed = 0;
     if (t - lastRoadCheck > 1500) {
       lastRoadCheck = t;
@@ -2327,6 +2453,7 @@ function frameBody(t) {
       steer,
       parkingBrake,
       time: simulationTime,
+      tolls:tollSession?.gates||[],
       traffic: traffic?.cars || [],
       navInfo,
       navZoom,
@@ -2363,10 +2490,10 @@ function frameBody(t) {
   }
 }
 new ResizeObserver(() => {
-  if (!$("#select").hidden && wizardStep === 6) drawOverview();
+  if (!$("#select").hidden && wizardStep === 4) drawOverview();
 }).observe(overview);
 new ResizeObserver(drawIntroMap).observe($("#intro-map"));
 renderRegions();
 renderVehicles();
-loadRegion(REGIONS.find((r) => r.id === "okinawa"));
+loadRegion(REGIONS.find((r) => r.id === "okinawa")).then(loadCourses).catch(error=>{$('#loading').textContent='코스 자료를 불러오지 못했습니다. '+error.message;});
 requestAnimationFrame(frame);

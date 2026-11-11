@@ -15,6 +15,10 @@ export async function loadTerrain(proj) {
   try {
     atlas = await fetch(new URL("./data/terrain-atlas.json", import.meta.url)).then((r) => r.json());
   } catch {}
+  try {
+    const courses=await fetch(new URL('./data/course-terrain.json',import.meta.url)).then(r=>r.json());
+    atlas.tiles.push(...courses.tiles);
+  } catch {}
   await Promise.all(
     (atlas.tiles || []).map(async (t) => {
       try {
@@ -71,12 +75,6 @@ export async function loadTerrain(proj) {
       base = sample(lon, lat, 11) ?? 0,
       high = sample(lon, lat, 14);
     if (high == null) return base;
-    const p = slippyPixel(lon, lat, 14),
-      west = 14011 * 256,
-      east = 14013 * 256,
-      north = 6931 * 256,
-      south = 6932 * 256;
-    const blend = Math.max(0, Math.min(1, Math.min(p.x - west, east - p.x, p.y - north, south - p.y) / 32));
-    return base * (1 - blend) + high * blend;
+    return high;
   };
 }

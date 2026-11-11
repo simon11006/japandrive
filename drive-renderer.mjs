@@ -1,8 +1,11 @@
 import { t } from "./i18n.mjs";
+import { pointInRing } from './map-data.mjs';
+import { buildCourseBuildings, buildCourseEnvironment, updateTollObjects } from './course-environment.mjs';
 import * as THREE from "./vendor/three.module.js";
 import {
   roadWidth,
   signalPhase,
+  signalRightArrow,
   forward,
   synchronizeSignals,
   reverseGuides,
@@ -326,6 +329,8 @@ export class DriveRenderer {
     );
     this.terrainGroup = new THREE.Group();
     this.scene.add(this.terrainGroup);
+    this.environmentGroup = new THREE.Group();
+    this.scene.add(this.environmentGroup);
     this.ruleGroup = new THREE.Group();
     this.scene.add(this.ruleGroup);
     const cabinLight = new THREE.PointLight("#e7ecf0", 1.4, 3.5, 1);
@@ -455,7 +460,12 @@ export class DriveRenderer {
   local(p, y = 0) {
     return new THREE.Vector3(p.x - this.base.x, this.elevation(p) + y, p.y - this.base.y);
   }
-  setup({ base, roads, features, coast, elevation, signals, bays, car, projection }) {
+  setup({ base, roads, features, coast, elevation, signals, bays, car, projection, course }) {
+    this.course = course;
+    this.courseRoads = roads;
+    this.coastRing = coast?.map(p=>[p.x,p.y]);
+    disposeGroup(this.environmentGroup);
+    this.tollObjects = [];
     this.ruleSignature = null;
     this.base = { ...base };
     this.surface = groundSurface(elevation || (() => 0));
@@ -494,7 +504,8 @@ export class DriveRenderer {
     this.setParking(this.bays);
     this.setSignals(this.signals, roads);
     this.setCar(car);
-    if (projection) this.addAerial(projection);
+    if (projection) this.addAerial(projection, course?.aerial);
+    if (course) buildCourseEnvironment(this, {...course, roads, features, coast});
   }
   setTerrain(focus) {
     const center = { x: Math.round(focus.x / 400) * 400, y: Math.round(focus.y / 400) * 400 };
@@ -507,6 +518,7 @@ export class DriveRenderer {
       step = 25;
     for (let x = center.x - range; x < center.x + range; x += step)
       for (let y = center.y - range; y < center.y + range; y += step) {
+        if (this.coastRing && !pointInRing([x + step / 2, y + step / 2], this.coastRing)) continue;
         const pts = [
           { x, y },
           { x: x + step, y },
@@ -517,7 +529,7 @@ export class DriveRenderer {
           const h = this.elevation(pts[i]);
           positions.push(pts[i].x - this.base.x, h, pts[i].y - this.base.y);
           // Lowland fields and settlements are paler; hills carry denser forest.
-          const c = new THREE.Color(h > 30 ? "#7f9a78" : "#c4c9b1");
+          const c = new THREE.Color(h > 30 ? "#668563" : "#a8b59a");
           colors.push(c.r, c.g, c.b);
         }
       }
@@ -533,15 +545,14 @@ export class DriveRenderer {
     mesh.receiveShadow = true;
     this.terrainGroup.add(mesh);
   }
-  addAerial(projection) {
-    const z = 18,
-      n = 2 ** z;
-    const geo = (x, y) => [
+  addAerial(projection, tiles) {
+    tiles ||= Array.from({length:15},(_,i)=>({z:18,x:224191+Math.floor(i/3),y:110898+i%3,path:`references/gsi-18-${224191+Math.floor(i/3)}-${110898+i%3}.jpg`}));
+    for (const tile of tiles) {
+      const z=tile.z,n=2**z,tx=tile.x,ty=tile.y;
+      const geo = (x, y) => [
       (x / n) * 360 - 180,
       (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI,
     ];
-    for (let tx = 224191; tx <= 224195; tx++)
-      for (let ty = 110898; ty <= 110900; ty++) {
         const sw = projection.toLocal(geo(tx, ty + 1)),
           ne = projection.toLocal(geo(tx + 1, ty));
         const width = ne.x - sw.x,
@@ -551,19 +562,20 @@ export class DriveRenderer {
         const draped = this.surface.drape([{ x: sw.x, y: ne.y }, ne, { x: ne.x, y: sw.y }, sw], 0.008),
           vertices = [],
           uv = [];
-        for (const p of draped) {
-          vertices.push(p.x - this.base.x, p.height, p.y - this.base.y);
-          uv.push((p.x - sw.x) / width, 1 - (p.y - ne.y) / depth);
+        for (let i=0;i<draped.length;i+=3) {
+          const triangle=draped.slice(i,i+3),cx=triangle.reduce((n,p)=>n+p.x/3,0),cy=triangle.reduce((n,p)=>n+p.y/3,0);
+          if(this.course&&this.coastRing&&!pointInRing([cx,cy],this.coastRing))continue;
+          for(const p of triangle){vertices.push(p.x - this.base.x, p.height, p.y - this.base.y);uv.push((p.x - sw.x) / width, 1 - (p.y - ne.y) / depth);}
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
         geometry.computeVertexNormals();
-        const key = `${tx}-${ty}`;
+        const key = `${z}-${tx}-${ty}`;
         let texture = this.aerialTextures.get(key);
         if (!texture) {
           texture = new THREE.TextureLoader().load(
-            new URL(`references/gsi-18-${key}.jpg`, import.meta.url).href,
+            new URL(tile.path, import.meta.url).href,
           );
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.anisotropy = 4;
@@ -618,6 +630,14 @@ export class DriveRenderer {
           b = r.points[i];
         if (r.tags.highway !== "service") {
           for (const side of [-1, 1]) addQuad(mark, a, b, 0.1, side * (width / 2 - 0.17), 0.065);
+          const laneCount = parseInt(r.tags.lanes,10)||2;
+          if (laneCount > 2 || (["yes","1","-1"].includes(r.tags.oneway) && laneCount > 1)) {
+            const len=Math.hypot(b.x-a.x,b.y-a.y);
+            for(let lane=1;lane<laneCount;lane++)for(let d=0;d<len;d+=9){
+              const t=d/len,u=Math.min(d+4,len)/len;
+              addQuad(mark,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},{x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u},.12,-width/2+width*lane/laneCount,.069);
+            }
+          }
           if (width > 5.3 && !["yes", "1", "-1"].includes(r.tags.oneway)) {
             const len = Math.hypot(b.x - a.x, b.y - a.y);
             for (let d = 0; d < len; d += 7) {
@@ -652,6 +672,10 @@ export class DriveRenderer {
   }
   setBuildings(features) {
     disposeGroup(this.buildingGroup);
+    if (this.course) {
+      buildCourseBuildings(this,features,this.course.theme,this.courseRoads,this.course.nodes);
+      return;
+    }
     const roof = (this.roofMaterial ??= mat("#ffffff", 0.95, { map: this.textures.concrete }));
     const pick = (id) => {
       let n = 2166136261;
@@ -784,8 +808,8 @@ export class DriveRenderer {
               heading: Math.atan2(p.x - r.points[i - 1].x, -(p.y - r.points[i - 1].y)),
             };
         }
-      s.approachHeading = nearest.heading;
-      s.axis = nearest.heading;
+      s.approachHeading = s.courseHeading ?? nearest.heading;
+      s.axis = s.approachHeading;
       const group = new THREE.Group();
       group.position.copy(this.local(s));
       group.rotation.y = -s.axis;
@@ -793,7 +817,7 @@ export class DriveRenderer {
       cylinderBetween(group, [4, 0, 0], [4, 5.4, 0], 0.075, metal);
       cylinderBetween(group, [4, 5.2, 0], [0.5, 5.2, 0], 0.055, metal);
       const heads = [];
-      for (const turn of [0, Math.PI]) {
+      for (const turn of [0, Math.PI, Math.PI/2, -Math.PI/2]) {
         const head = new THREE.Group();
         head.rotation.y = turn;
         head.position.set(0.5, 5.0, 0);
@@ -809,7 +833,14 @@ export class DriveRenderer {
           bulbs.push(bulb);
         }
         group.add(head);
-        heads.push(bulbs);
+        let arrow;
+        if(s.profile==='arrow'){
+          arrow=new THREE.Mesh(new THREE.PlaneGeometry(.46,.3),new THREE.MeshBasicMaterial({map:labelTexture('→','#55ffc2','#132a28'),transparent:false}));
+          arrow.position.set(.38,-.4,.16);head.add(arrow);
+        }
+        const pedestrian=new THREE.Mesh(new THREE.PlaneGeometry(.22,.45),new THREE.MeshBasicMaterial({map:labelTexture('人','#dbf0da','#172624')}));
+        pedestrian.position.set(3.1,-2.5,.1);head.add(pedestrian);
+        heads.push({bulbs,arrow,pedestrian,heading:s.axis-turn});
       }
       this.signalGroup.add(group);
       this.signalHeads.push({ signal: s, heads });
@@ -979,16 +1010,16 @@ export class DriveRenderer {
     }
     Object.assign(this.overlayCamera, { left: -width / 2, right: width / 2, top: height / 2, bottom: -height / 2 });
     this.overlayCamera.updateProjectionMatrix();
-    const mw = portrait ? width * 0.39 : Math.min(300, width * 0.2),
+    const mw = portrait ? Math.min(190, width * 0.28) : Math.min(200, width * 0.145),
       mh = mw * 0.56,
+      top = portrait ? Math.min(224, height * 0.31) : height < 600 ? Math.max(112, height * 0.31) : Math.max(135, height * 0.34 - mh / 2),
       glancingLeft = (this.headYaw ?? 0) > 0.4;
     let shown = 0;
     for (const m of this.overlayMirrors) {
       m.group.visible = portrait || this.debugInsets || (m.side < 0 && !glancingLeft);
       if (!m.group.visible) continue;
       shown++;
-      if (portrait) m.group.position.set(m.side * width * 0.26, height * 0.5 - height * 0.23 - mh / 2, 0);
-      else m.group.position.set(m.side * (width / 2 - mw / 2 - 18), height * 0.08, 0);
+      m.group.position.set(m.side * (width / 2 - mw / 2 - 14), height / 2 - top - mh / 2, 0);
       m.bg.scale.set(mw + 6, mh + 24, 1);
       // Mirror textures are already mirrored by the camera flip below.
       m.plane.scale.set(-mw, mh, 1);
@@ -1171,14 +1202,17 @@ export class DriveRenderer {
       }
     }
     for (const item of this.signalHeads) {
-      const phase = signalPhase(item.signal, item.signal.approachHeading, time),
-        which = { green: 0, yellow: 1, red: 2 }[phase];
-      for (const bulbs of item.heads)
-        bulbs.forEach((bulb, i) =>
+      for (const head of item.heads) {
+        const phase=signalPhase(item.signal,head.heading,time),flashing=phase.startsWith('flash'),
+          which=flashing?(Math.floor(time*2)%2===0?(phase==='flash-red'?2:1):-1):{green:0,yellow:1,red:2}[phase];
+        if(head.arrow)head.arrow.visible=signalRightArrow(item.signal,head.heading,time);
+        head.pedestrian.material.color.set(phase==='green'?'#86efa8':'#ed7c6d');
+        head.bulbs.forEach((bulb, i) =>
           bulb.material.color.set(
             i === which ? ["#52ffc4", "#ffcb48", "#ff493b"][i] : ["#164c3a", "#55441d", "#4d2427"][i],
           ),
         );
+      }
     }
   }
   updateReverseGuides(state) {
@@ -1241,6 +1275,7 @@ export class DriveRenderer {
       this.introCamera.updateProjectionMatrix();
     }
     if (this.surface) this.setTerrain(state.position);
+    if (state.tolls) updateTollObjects(this,state.tolls);
     this.syncTraffic(state.traffic || [], state.time);
     if (state.intro) {
       this.interior.visible = false;
@@ -1307,7 +1342,7 @@ export class DriveRenderer {
       this.camera.fov = (2 * Math.atan(Math.tan((navFov * Math.PI) / 360) / this.camera.aspect) * 180) / Math.PI;
     } else {
       // Eyes rest a few degrees below the horizon, as when driving.
-      this.camera.rotation.x = portrait ? -0.09 : -0.085;
+      this.camera.rotation.x = layout.viewPitch - (portrait ? 0.005 : 0);
       if (portrait) this.camera.position.set(eye.x - 0.12, eye.y + 0.02, eye.z + 0.1);
       else this.camera.position.copy(eye);
       this.camera.fov = verticalFov(view, this.camera.aspect);

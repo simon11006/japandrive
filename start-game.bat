@@ -7,6 +7,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-rem The server picks a free port (8000 or the next one) and opens the browser there.
+echo Japan Drive: opening the available local port (close this window to stop the server)
 node server.mjs --open
 pause

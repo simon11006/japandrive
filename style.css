@@ -3574,3 +3574,132 @@ header kbd { font-size: 10px; padding: 0 4px; border: 1px solid #ffffff55; borde
 .lang-switch button.on{background:#ffffff26;opacity:1;font-weight:700}
 .title-lang{position:absolute;top:84px;right:58px;z-index:6;background:#0b1a20cc;color:#fff}
 .title-lang button{color:#fff;padding:7px 14px;font-size:13px}
+:root { --course-accent: #bef1d9; }
+#regions { display:none !important; }
+.step-progress { grid-template-columns: repeat(4,minmax(0,1fr)); }
+#select .intro h1 { font-size:clamp(26px,3.2vw,44px); line-height:1.25; letter-spacing:-.045em; }
+#select .intro { padding-bottom:20px; }
+#select .planner:has(.trip-panel:not([hidden])) { display:block; }
+#select .trip-panel { width:100%; }
+.course-heading { display:flex;align-items:center;justify-content:space-between;gap:16px; margin:8px 0 18px; }
+.course-heading p {font-size:18px;font-weight:600;margin:0;}
+.course-heading>span {font-size:12px;color:#95afb4;}
+.course-filters {display:flex;gap:8px;overflow:auto;margin-bottom:22px;padding-bottom:3px;}
+.course-filters button {white-space:nowrap;padding:9px 18px;border:1px solid #53717166;border-radius:30px;font-size:13px;background:#123039;}
+.course-filters button[aria-pressed=true] {background:#c3ebd6;color:#102b30;border-color:#c3ebd6;}
+.course-carousel {display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:12px;align-items:center;}
+.course-carousel>button {padding:0;height:48px;font-size:30px;border:1px solid #7b9c9655;border-radius:24px;}
+#course-cards {display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:#789e93 transparent;padding:4px 2px 18px;}
+.course-card {flex:0 0 calc((100% - 40px)/3);min-width:270px;scroll-snap-align:start;white-space:normal;overflow:hidden;text-align:left;border:1px solid #728c8140;border-radius:14px;padding:0;background:#153039;color:#f1f5ed;transition:transform .2s,border .2s,box-shadow .2s;}
+.course-card:hover {transform:translateY(-3px);border-color:#9acfb4;}
+.course-card.selected {border-color:var(--course-accent);box-shadow:0 0 0 1px var(--course-accent);background:#1c3b42;}
+.course-picture {height:182px;position:relative;overflow:hidden;border-bottom:1px solid #8baf9c33;background:#102a31;}
+.course-picture canvas {width:100%;height:100%;opacity:.85;}
+.course-kicker {position:absolute;left:16px;top:14px;background:#0a2528df;border:1px solid #c6e5d133;border-radius:20px;font-size:10px;padding:6px 10px;color:#d9eddf;letter-spacing:.06em;}
+.course-number {position:absolute;right:14px;bottom:7px;color:#c7efdf66;font-size:30px;}
+.course-card-body {padding:20px;}
+.course-meta {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;}
+.course-meta strong {font-size:22px;letter-spacing:-.04em;}
+.course-stars {letter-spacing:2px;font-size:17px;color:#e6d49c;}
+.course-card h2 {font-size:20px;letter-spacing:-.035em;line-height:1.4;margin:0 0 10px;}
+.course-card-body>p {font-size:13px;color:#adc3c4;line-height:1.65;min-height:43px;margin:0 0 16px;}
+.course-tags {display:flex;flex-wrap:wrap;gap:6px;min-height:57px;align-content:flex-start;}
+.course-tags span {border-radius:4px;background:#bed5c310;padding:5px 7px;font-size:11px;color:#c9d9ce;line-height:1.4;}
+.course-card-body>small {display:block;color:#98b5b5;font-size:11px;margin-top:14px;}
+#course-detail {display:flex;gap:24px;justify-content:space-between;align-items:center;border-top:1px solid #6b8c8640;padding:18px 0 6px;}
+#course-detail strong {font-size:15px;color:#d3ecdb;}
+#course-detail p {font-size:13px;color:#9bb6b8;margin:8px 0;}
+#course-detail>span {font-size:11px;max-width:280px;color:#8ea9a8;line-height:1.7;}
+#review-course-title {font-size:clamp(22px,2.4vw,32px);line-height:1.3;letter-spacing:-.035em;margin:0 0 10px;}
+.review-course-meta {color:#e5d99e;font-size:14px;line-height:1.7;margin-bottom:24px;}
+#toll-options {margin-top:24px;border:1px solid #8bb5a150;border-radius:12px;padding:22px;}
+#toll-options legend {font-size:16px;padding:0 8px;}
+#toll-options label {display:flex;align-items:center;gap:12px;font-size:14px;padding:10px 0;}
+#toll-options input {width:18px;height:18px;accent-color:#bce8d1;}
+#course-drive-status {position:fixed;right:24px;top:80px;z-index:12;display:flex;flex-direction:column;gap:6px;padding:14px 18px;border:1px solid #b3d3bf33;background:#0c282ce8;border-radius:8px;pointer-events:none;}
+#course-drive-status[hidden],#toll-prompt[hidden],#toll-options[hidden],#course-panel[hidden] {display:none;}
+#course-drive-status small {color:#c5e4d5;font-size:12px;}
+#course-drive-status strong {font-size:17px;font-variant-numeric:tabular-nums;}
+#course-drive-status span {font-size:11px;color:#a9c1b6;}
+#toll-prompt {position:fixed;left:50%;top:110px;transform:translateX(-50%);max-width:min(90vw,600px);z-index:20;background:#102c32ed;border:1px solid #d7e9b5;border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:15px;font-size:14px;}
+#toll-action {white-space:nowrap;background:#d7e9b5;color:#122e34;padding:10px 15px;font-size:12px;}
+@media(max-width:1000px){.course-card{flex-basis:calc((100% - 20px)/2)}.course-heading{align-items:flex-start;flex-direction:column;gap:7px}}
+@media(max-width:600px){.course-carousel{grid-template-columns:minmax(0,1fr)}.course-carousel>button{display:none}#course-cards{gap:14px;padding:3px 2px 18px}.course-card{flex-basis:87%;min-width:250px}.course-picture{height:160px}.course-card-body{padding:16px}.course-card h2{font-size:19px}#course-detail{display:block}#course-detail>span{display:block;margin-top:6px}.course-stars{font-size:15px}.step-progress button{padding:9px 3px;font-size:11px}#course-drive-status{top:64px;right:9px;padding:8px 10px}#course-drive-status strong{font-size:14px}#course-drive-status span{display:none}#toll-prompt{top:122px;flex-direction:column;gap:8px;width:88vw;font-size:12px}.review-course-meta{font-size:12px}}
+#select.game-ui .step-progress {grid-template-columns:repeat(4,minmax(0,1fr));}
+#select.game-ui[data-step="1"] .intro {margin-bottom:16px;gap:10px;}
+#select.game-ui[data-step="1"] .step-progress {margin-bottom:18px;}
+@media(min-width:900px) and (max-height:950px){
+ #select.game-ui[data-step="1"] #step-title {font-size:32px;}
+ #select.game-ui[data-step="1"] .course-picture {height:125px;}
+ #select.game-ui[data-step="1"] .course-heading {margin-bottom:12px;}
+ #select.game-ui[data-step="1"] .course-filters {margin-bottom:12px;}
+ #select.game-ui[data-step="1"] .course-card-body {padding:16px;}
+ #select.game-ui[data-step="1"] .course-card-body>p {min-height:36px;margin-bottom:10px;}
+ #select.game-ui[data-step="1"] .course-tags {min-height:49px;}
+ #select.game-ui[data-step="1"] .course-card-body>small {margin-top:8px;}
+}
+@media(max-width:600px){#select.game-ui .step-progress button {padding:8px 5px;gap:5px;font-size:10px;}#select.game-ui .step-progress .step-number {width:20px;height:20px;font-size:11px;}#select.game-ui .wizard-controls{bottom:0;padding:12px 18px;}#select.game-ui #step-next{min-width:125px;}#select.game-ui #step-selection{display:none;}#select.game-ui{padding-bottom:120px;}}
+/* Phone setup keeps the selected card and its difficulty in the first view. */
+@media(max-width:600px){
+ #select.game-ui {padding:20px 16px 100px;background:#071b25ec;}
+ #select.game-ui::before,#select.game-ui::after {display:none;}
+ #select.game-ui .intro,#select.game-ui[data-step="1"] .intro {gap:8px;margin-bottom:12px;padding:0;}
+ #select.game-ui #step-caption {font-size:11px;letter-spacing:2px;padding-right:100px;margin:0;line-height:1.4;}
+ #select.game-ui #back-title {position:absolute;right:0;top:-8px;padding:8px;font-size:10px;}
+ #select.game-ui #step-title {font-size:23px;line-height:1.35;padding:10px 12px;margin:8px 0 0;border-width:2px;box-shadow:none;letter-spacing:-.04em;}
+ #select.game-ui #step-description {font-size:12px;line-height:1.55;margin:0;}
+ #select.game-ui .step-progress,#select.game-ui[data-step="1"] .step-progress {margin:12px 0 16px;gap:5px;}
+ #select.game-ui .step-progress button {min-height:42px;flex-direction:row;justify-content:center;gap:4px;font-size:10px;padding:6px 2px;}
+ #select.game-ui .step-progress .step-number {width:18px;height:18px;flex-basis:18px;}
+ #select.game-ui .course-heading {margin:0 0 12px;gap:4px;}
+ #select.game-ui .course-heading p {font-size:16px;}
+ #select.game-ui .course-heading>span {font-size:11px;}
+ #select.game-ui .course-filters {margin-bottom:12px;scrollbar-width:none;}
+ #select.game-ui .course-filters::-webkit-scrollbar {display:none;}
+ #select.game-ui .course-filters button {font-size:12px;padding:8px 14px;}
+ #select.game-ui .course-picture {height:110px;}
+ #select.game-ui .course-card-body {padding:14px;}
+ #select.game-ui .course-meta {margin-bottom:8px;}
+ #select.game-ui .course-meta strong {font-size:20px;}
+ #select.game-ui .course-card h2 {font-size:18px;margin-bottom:6px;}
+ #select.game-ui .course-card-body>p {font-size:12px;min-height:36px;margin-bottom:10px;}
+ #select.game-ui .course-tags {gap:5px;min-height:45px;}
+ #select.game-ui .course-tags span {font-size:10px;padding:4px 6px;}
+ #select.game-ui .course-card-body>small {margin-top:8px;}
+ #select.game-ui .wizard-controls {flex-wrap:nowrap;gap:12px;padding:12px 18px 18px;background:#07151bf5;}
+ #select.game-ui .wizard-controls button {min-height:44px;font-size:14px;}
+ #select.game-ui #step-next {width:auto;flex:1;margin:0;}
+ #select.game-ui #step-back {flex:0 0 auto;}
+ #select.game-ui .vehicle-section,#select.game-ui .difficulty-panel {padding:16px 12px;}
+ #select.game-ui #overview {height:190px;}
+}
+@media(max-width:600px){
+ body.driving header {height:44px;padding:6px 10px;gap:8px;}
+ body.driving .brand span,body.driving .lang-switch,body.driving #fullscreen,body.driving header kbd {display:none;}
+ body.driving .header-right {gap:5px;}
+ body.driving header button {padding:7px 9px;font-size:10px;}
+ body.driving #course-drive-status {top:49px;left:10px;right:10px;padding:6px 10px;flex-direction:row;align-items:center;justify-content:space-between;gap:6px;}
+ body.driving #course-drive-status small {font-size:11px;}
+ body.driving #course-drive-status strong {font-size:12px;white-space:nowrap;}
+ body.driving #driving-status.drive-hud {top:85px;bottom:auto;width:calc(100% - 20px);max-width:390px;gap:7px;padding:6px 10px 9px;border-radius:8px;box-sizing:border-box;}
+ .drive-hud .live-velocity {min-width:74px;column-gap:5px;}
+ .drive-hud .live-velocity strong {font-size:34px;}
+ .drive-hud .live-velocity small {font-size:10px;}
+ .drive-hud .live-velocity b {font-size:14px;}
+ .drive-hud #speed-limit {width:38px;height:38px;font-size:14px;border-width:4px;}
+ .drive-hud #speed-limit small {font-size:8px;bottom:-14px;}
+ .drive-hud .live-score strong {font-size:22px;}
+ .drive-hud .live-score small {font-size:9px;}
+ .drive-hud .hud-blinker span {font-size:22px;}
+ .drive-hud kbd {font-size:9px;padding:0 3px;}
+ body.driving #hint {top:157px;bottom:auto;left:10px;right:10px;width:auto;max-width:none;padding:7px 10px;font-size:10px;line-height:1.5;}
+ body.driving #drive-toolbar {bottom:166px;right:10px;padding:8px;}
+ body.driving .touch-tools {left:10px;right:10px;bottom:108px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;}
+ body.driving .touch-tools button {min-height:40px;font-size:10px;padding:7px 4px;}
+ body.driving .touch-steer {left:10px;bottom:24px;gap:8px;}
+ body.driving .touch-pedals {right:10px;bottom:24px;gap:8px;}
+ body.driving .touch-steer button,body.driving .touch-pedals button {width:56px;height:56px;padding:6px;white-space:nowrap;}
+ body.driving .touch-pedals button:last-child {height:72px;}
+ body.driving #toll-prompt {top:322px;}
+ body.driving #blink-hint {top:calc(100% + 65px);font-size:11px;}
+}

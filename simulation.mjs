@@ -1,8 +1,8 @@
 export const TAU = Math.PI * 2;
 export const DIFFICULTIES = [
-  { id: "easy", name: "쉬움", description: "여유 있는 도로", cars: 8 },
+  { id: "easy", name: "한산", description: "여유 있는 도로", cars: 8 },
   { id: "normal", name: "보통", description: "일상적인 교통", cars: 28 },
-  { id: "hard", name: "어려움", description: "도심처럼 밀집된 차량", cars: 80 },
+  { id: "hard", name: "혼잡", description: "도심처럼 밀집된 차량", cars: 80 },
 ];
 export const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export const headingBetween = (a, b) => Math.atan2(b.x - a.x, -(b.y - a.y));
@@ -102,11 +102,23 @@ function hash(value) {
   return n >>> 0;
 }
 export function signalPhase(signal, heading, time) {
+  if(signal.profile==='flash')return Math.abs(Math.cos(heading-(signal.axis??0)))>.707?'flash-red':'flash-yellow';
+  if(signal.profile==='arrow'){
+    const main=Math.abs(Math.cos(heading-(signal.axis??0)))>.707;
+    const phase=(time+(hash(signal.timingId??signal.id)%80)+(main?0:40))%80;
+    return phase<24?'green':phase<27?'yellow':'red';
+  }
   const phase = (time + (hash(signal.timingId ?? signal.id) % 66)) % 66;
   const axis = signal.axis ?? 0;
   const main = Math.abs(Math.cos(heading - axis)) > 0.707;
   const t = main ? phase : (phase + 33) % 66;
   return t < 27 ? "green" : t < 30 ? "yellow" : "red";
+}
+export function signalRightArrow(signal,heading,time){
+  if(signal.profile!=='arrow')return false;
+  const main=Math.abs(Math.cos(heading-(signal.axis??0)))>.707;
+  const phase=(time+hash(signal.timingId??signal.id)%80+(main?0:40))%80;
+  return phase>=27&&phase<35;
 }
 export function synchronizeSignals(signals) {
   const groups = [];
@@ -173,6 +185,9 @@ export function buildRoadGraph(roads) {
           heading: headingBetween(from, to),
           width: roadWidth(road.tags),
           roadId: road.id,
+          highway: road.tags.highway,
+          oneway: ['yes','1','true','-1'].includes(road.tags.oneway),
+          lanes: parseInt(road.tags.lanes,10)||1,
         };
         edges.push(edge);
         from.out.push(edge);
@@ -252,7 +267,7 @@ export class TrafficSimulation {
   place(car) {
     const e = car.edge,
       t = car.along / e.length,
-      offset = Math.min(1.65, e.width * 0.23);
+      offset = e.oneway ? (e.lanes>1 ? e.width/2-e.width/e.lanes*((hash(car.id)%e.lanes)+.5) : .15) : Math.min(1.65, e.width * 0.23);
     car.x = e.from.x + (e.to.x - e.from.x) * t - Math.cos(e.heading) * offset;
     car.y = e.from.y + (e.to.y - e.from.y) * t - Math.sin(e.heading) * offset;
     car.heading = e.heading;
@@ -276,9 +291,9 @@ export class TrafficSimulation {
     return weighted.at(-1).e;
   }
   tick(dt, time, player) {
-    const bodies = [...this.cars, player];
+    const bodies = [...this.cars, player,...(this.barriers||[])];
     for (const car of this.cars) {
-      let target = car.desired;
+      let target = car.edge.highway==='motorway'?Math.max(car.desired,20):car.desired;
       const f = forward(car.heading);
       for (const other of bodies) {
         if (other === car) continue;
@@ -307,6 +322,14 @@ export class TrafficSimulation {
         if (ahead <= 0 || ahead > 45 || lateral > 7 || toLine < -0.5) continue;
         const phase = signalPhase(s, car.heading, time);
         if (phase === "green") continue;
+        if (phase === 'flash-yellow') {target=Math.min(target,6);continue;}
+        if (phase === 'flash-red') {
+          car.signalStops??=new Map();const held=car.signalStops.get(s.id)||0;
+          if(toLine<4&&car.speed<.2)car.signalStops.set(s.id,held+dt);
+          if(held>=1.2)continue;
+        }
+        const turn=car.next?wrapAngle(car.next.heading-car.heading):0;
+        if(turn>.4&&turn<2.5&&signalRightArrow(s,car.heading,time))continue;
         // Yellow: stop only if a comfortable stop (≤3.5 m/s²) is still possible.
         if (phase === "yellow" && car.speed ** 2 / (2 * Math.max(0.1, toLine)) > 3.5) continue;
         target = Math.min(target, Math.sqrt(2 * 2.5 * Math.max(0, toLine - 0.5)));
@@ -321,7 +344,7 @@ export class TrafficSimulation {
       // Two AI cars nosed into each other at a junction would wait forever;
       // after 6 s the AI-only standoff is released. The player is never ignored.
       car.blockedFor = hits.length ? (car.blockedFor || 0) + dt : 0;
-      const blocked = hits.includes(player) || (hits.length > 0 && car.blockedFor < 6);
+      const blocked = hits.includes(player) || hits.some(h=>h.barrier) || (hits.length > 0 && car.blockedFor < 6);
       car.speed = blocked ? 0 : speed;
       if (blocked) car.braking = true;
       car.along += car.speed * dt;

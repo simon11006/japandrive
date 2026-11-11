@@ -58,10 +58,12 @@ export function driverEye(car, layout, settings = VIEW_DEFAULTS) {
   );
 }
 
-// Horizontal field of view in degrees. Portrait phones need a wider frame to
-// show the road at all; they also get the mirror strip.
+// Cap the vertical field on portrait phones: retaining a 92-degree horizontal
+// view at 9:19 would show mostly roof and footwell and shrink the road. Both
+// door mirrors remain available in the portrait mirror strip.
 export function horizontalFov(settings, aspect) {
-  return aspect < 0.85 ? Math.max(settings.fov, 92) : settings.fov;
+  const portraitLimit = (2 * Math.atan(Math.tan(45 * Math.PI / 180) * aspect) * 180) / Math.PI;
+  return aspect < 0.85 ? Math.min(settings.fov, portraitLimit) : settings.fov;
 }
 export function verticalFov(settings, aspect) {
   const h = (horizontalFov(settings, aspect) * Math.PI) / 180;

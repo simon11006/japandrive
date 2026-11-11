@@ -29,11 +29,12 @@ export const COCKPITS = {
     mirrorDrop: 0.2,
     eyeX: 0.38,
     eyeZ: 0.14,
+    viewPitch: -0.085,
     reference: "references/user-prius-interior.png",
   },
   alphard: {
     wheelRadius: 0.189,
-    wheelDrop: 0.385,
+    wheelDrop: 0.445,
     wheelZ: -0.43,
     screenWidth: 0.31,
     screenHeight: 0.176,
@@ -55,6 +56,9 @@ export const COCKPITS = {
     mirrorDrop: 0.2,
     eyeX: 0.38,
     eyeZ: 0.14,
+    // The taller seating position looks out over the dash. Keep the same
+    // optical FOV as the Prius; height and cabin geometry create the view.
+    viewPitch: -0.045,
     reference: "references/user-alphard-interior.png",
   },
 };

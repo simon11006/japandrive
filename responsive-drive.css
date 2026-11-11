@@ -1,0 +1,118 @@
+/* Touch driving: keep the forward view clear and instruments readable.
+   The mode follows orientation and input capability, without restarting a drive. */
+body.driving[data-drive-layout="portrait"],
+body.driving[data-drive-layout="landscape"] {
+  --drive-pad: clamp(56px, 8vw, 80px);
+  --drive-tools-bottom: calc(var(--drive-pad) + 56px);
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) header {
+  height:44px; padding:6px 12px; gap:8px;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .header-right {gap:5px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) header button {
+  min-height:32px; padding:7px 11px; font-size:11px;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .lang-switch,
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .badge,
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #fullscreen,
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) header kbd {display:none;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #touch-controls {display:block;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #touch-controls[hidden] {display:none;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #driving-status.drive-hud {
+  box-sizing:border-box; border-radius:10px; gap:8px; padding:7px 12px 12px;
+  background:#06151cf5; box-shadow:0 5px 18px #0004;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-velocity {
+  min-width:90px; column-gap:6px; justify-content:center;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-velocity strong {
+  font:900 52px/.95 "Arial",sans-serif; letter-spacing:-2px; color:#fff;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-velocity small {font-size:11px;color:#d8e5df;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-velocity b {font-size:16px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-score strong {font-size:24px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .live-score small {font-size:10px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #speed-limit {
+  width:40px;height:40px;font-size:17px;border-width:4px;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #speed-limit small {font-size:9px;bottom:-15px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .hud-blinker span {font-size:23px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .drive-hud kbd {display:none;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #hint {
+  bottom:auto;left:50%;right:auto;transform:translateX(-50%);width:max-content;
+  max-width:min(460px,calc(100% - 24px));padding:7px 10px;font-size:11px;line-height:1.45;word-break:keep-all;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #touch-controls button {
+  padding:7px;white-space:nowrap;background:#102d38ee;border:1px solid #adc7be77;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #touch-controls button.held {background:#61957b;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-tools {
+  left:50%;right:auto;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-tools button {min-height:42px;font-size:11px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-tools [data-action="gear"],
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-tools [data-action="nav"] {display:none;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-steer {bottom:24px;left:14px;gap:8px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-pedals {bottom:24px;right:14px;gap:8px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-steer button,
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-pedals button {
+  width:var(--drive-pad);height:var(--drive-pad);font-size:16px;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-pedals button:last-child {
+  height:calc(var(--drive-pad) + 16px);background:#45765eec;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #gear-state {font-size:11px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #drive-toolbar kbd,
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #touch-controls kbd {display:none;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .touch-steer button {font-size:24px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #drive-toolbar button {min-height:38px;font-size:12px;padding:8px 12px;}
+body.driving[data-drive-layout="portrait"] #driving-status.drive-hud {
+  top:85px;bottom:auto;left:50%;width:min(440px,calc(100% - 20px));max-width:none;
+}
+body.driving[data-drive-layout="portrait"] #course-drive-status {
+  top:49px;left:10px;right:10px;flex-direction:row;align-items:center;justify-content:space-between;
+  padding:6px 10px;gap:8px;
+}
+body.driving[data-drive-layout="portrait"] #course-drive-status small {font-size:12px;}
+body.driving[data-drive-layout="portrait"] #course-drive-status strong {font-size:13px;white-space:nowrap;}
+body.driving[data-drive-layout="portrait"] #course-drive-status span {display:none;}
+body.driving[data-drive-layout="portrait"] #hint {top:172px;}
+body.driving[data-drive-layout="portrait"] .touch-tools {bottom:var(--drive-tools-bottom);width:min(480px,calc(100% - 24px));}
+body.driving[data-drive-layout="portrait"] #drive-toolbar {bottom:calc(var(--drive-tools-bottom) + 62px);right:12px;left:auto;transform:none;padding:8px;}
+body.driving[data-drive-layout="portrait"] #blink-hint {top:calc(100% + 61px);font-size:11px;}
+body.driving[data-drive-layout="portrait"] #toll-prompt {top:360px;max-width:min(480px,90vw);font-size:13px;}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) #violation-warning {
+  top:auto;left:50%;width:max-content;max-width:min(410px,calc(100% - 24px));
+  padding:9px 12px;font-size:12px;line-height:1.5;word-break:keep-all;
+}
+body.driving:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]):has(#violation-warning:not([hidden])) #hint {visibility:hidden;}
+body.driving[data-drive-layout="portrait"] #violation-warning {bottom:calc(var(--drive-tools-bottom) + 142px);}
+body.driving[data-drive-layout="portrait"] #camera-warning {top:350px;right:12px;max-width:200px;font-size:11px;}
+body.driving[data-drive-layout="landscape"] {--drive-pad:clamp(50px,6vw,68px);}
+body.driving[data-drive-layout="landscape"] #driving-status.drive-hud {
+  top:49px;bottom:auto;left:50%;width:min(360px,calc(100% - 300px));max-width:none;
+}
+body.driving[data-drive-layout="landscape"] .live-velocity strong {font-size:46px;}
+body.driving[data-drive-layout="landscape"] #course-drive-status {top:51px;right:12px;left:auto;padding:7px 10px;max-width:190px;}
+body.driving[data-drive-layout="landscape"] #course-drive-status small {font-size:11px;}
+body.driving[data-drive-layout="landscape"] #course-drive-status strong {font-size:13px;}
+body.driving[data-drive-layout="landscape"] #course-drive-status span {display:none;}
+body.driving[data-drive-layout="landscape"] #hint {top:auto;bottom:138px;max-width:min(410px,calc(100% - 310px));}
+body.driving[data-drive-layout="landscape"] .touch-tools {bottom:20px;width:min(460px,calc(100% - 328px));}
+body.driving[data-drive-layout="landscape"] #drive-toolbar {bottom:76px;right:auto;left:50%;transform:translateX(-50%);padding:7px;}
+body.driving[data-drive-layout="landscape"] #gear-state {display:none;}
+body.driving[data-drive-layout="landscape"] #blink-hint {top:calc(100% + 8px);font-size:11px;max-width:350px;}
+body.driving[data-drive-layout="landscape"] #toll-prompt {top:118px;font-size:12px;padding:9px 12px;}
+body.driving[data-drive-layout="landscape"] #violation-warning {bottom:138px;max-width:min(410px,calc(100% - 310px));}
+body.driving[data-drive-layout="landscape"] #camera-warning {top:120px;right:12px;max-width:175px;font-size:10px;}
+@media(max-width:700px) and (orientation:landscape){
+ body.driving[data-drive-layout="landscape"] #driving-status.drive-hud {gap:5px;padding:6px 8px 11px;}
+ body.driving[data-drive-layout="landscape"] .live-velocity strong {font-size:38px;}
+ body.driving[data-drive-layout="landscape"] .live-velocity {min-width:74px;}
+ body.driving[data-drive-layout="landscape"] .hud-blinker {display:none;}
+ body.driving[data-drive-layout="landscape"] #driving-status.drive-hud {grid-template-columns:auto auto auto;}
+ body.driving[data-drive-layout="landscape"] #course-drive-status {max-width:130px;padding:6px;}
+ body.driving[data-drive-layout="landscape"] #course-drive-status strong {font-size:11px;}
+ body.driving[data-drive-layout="landscape"] #course-drive-status small {font-size:9px;}
+ body.driving[data-drive-layout="landscape"] .touch-tools button {font-size:10px;padding:5px 2px;}
+}
