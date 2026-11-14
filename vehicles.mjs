@@ -58,6 +58,11 @@ export function steeringLimit(car) {
 export const CREEP_SPEED = 1.7; // m/s, about 6 km/h
 export const REVERSE_LIMIT = 4.2; // m/s, about 15 km/h
 export const TOP_SPEED = 44; // m/s, about 160 km/h
+export function selectGear(state, next, brakeHeld) {
+  if (Math.abs(state.speed) >= 0.2) return { ok: false, reason: 'moving' };
+  if (!brakeHeld && !state.parkingBrake) return { ok: false, reason: 'brake' };
+  return { ok: true, state: { ...state, speed: 0, gear: next < 0 ? -1 : 1 } };
+}
 export function longitudinal(speed, gear, input, car) {
   const gas = Math.max(0, Math.min(1, Number(input.gas) || 0)),
     brake = Math.max(0, Math.min(1, Number(input.brake) || 0)),

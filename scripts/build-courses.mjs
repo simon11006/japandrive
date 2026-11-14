@@ -6,6 +6,10 @@ import {projection} from '../map-data.mjs';
 import {CITY_AREAS} from './city-areas.mjs';
 import {CITY_COURSES} from './city-course-definitions.mjs';
 import {buildRoadGraph,wrapAngle} from '../simulation.mjs';
+import {practiceRoute} from './practice-route.mjs';
+import {prepareSignalLayouts} from '../junctions.mjs';
+import {StreetEncounters} from '../street-encounters.mjs';
+import {sceneFeatures} from '../scene-features.mjs';
 const read=async p=>JSON.parse(await readFile(p,'utf8'));
 let proj=projection([127.68,26.214]);
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -72,6 +76,18 @@ for(const def of defs){
   parking={type:'area',name:def.finishLabel,polygon:f.geometry.map(p=>[p.lon,p.lat])};
   route={distance:length(coords),duration,geometry:{type:'LineString',coordinates:coords},legs};
  }
+ if(['city','urban','village'].includes(def.theme)){
+  const ways=raw.elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway)&&e.tags.tunnel!=='yes'&&!(Number(e.tags.layer)<0));
+  route=practiceRoute(ways,route.geometry.coordinates.at(-1),{seed:defs.indexOf(def)+1,...(def.theme==='village'?{min:350,max:700,turns:1}:{})});
+  def.practice=route.practice;def.start=route.geometry.coordinates[0];delete def.via;
+  def.startLabel=def.region==='오키나와'||!def.region?'마을 좌측통행 출발점':`${def.region} 좌측통행 출발점`;
+  const {left,right,longestStraight}=def.practice;
+  def.features=[`좌회전 ${left}회`,`우회전 ${right}회`,def.theme==='city'?'신호·차로 선택':'좁은 길·큰길 연결','목표면 주차'];
+  def.assessment=['좌회전 후 왼쪽 차로 진입','대향차 확인 후 우회전',`직선 구간 최장 ${longestStraight}m`];
+  def.subtitle=def.theme==='city'?'교차로마다 왼쪽 차로를 다시 찾고, 대향차를 살피며 우회전하세요':'마을길과 교차로를 연결하며 일본의 좌측통행에 익숙해지세요';
+  if(def.id==='osaka-midosuji')def.name='신사이바시 · 좌측통행 루프';
+  if(def.id==='sapporo-odori')def.name='삿포로 · 교차로 루프';
+ }
  const local=route.geometry.coordinates.map(proj.toLocal);
  const isNear=(e,r)=>e.geometry?e.geometry.some(p=>nearest(proj.toLocal([p.lon,p.lat]),local)<r):nearest(proj.toLocal([e.lon,e.lat]),local)<r;
  const elements=raw.elements.filter(e=>isNear(e,e.tags?.building?230:420));
@@ -100,11 +116,24 @@ for(const def of defs){
  if(def.theme==='mountain'&&signals.length)signals[0].profile='flash';
  // Do not let duplicate nearby signal nodes produce contradictory phases.
  const merged=[];for(const s of signals){if(!merged.some(o=>dist(proj.toLocal([s.lon,s.lat]),proj.toLocal([o.lon,o.lat]))<55))merged.push(s);}
+ if(['city','urban'].includes(def.theme)){
+  for(const s of merged)s.profile='standard';
+  const rights=route.legs.flatMap(l=>l.steps).filter(s=>s.maneuver.modifier==='right').map(s=>proj.toLocal(s.maneuver.location));
+  const candidates=merged.map(s=>({s,d:Math.min(...rights.map(p=>dist(p,proj.toLocal([s.lon,s.lat]))))})).sort((a,b)=>a.d-b.d);
+  if(candidates[0]?.d<40){candidates[0].s.profile='arrow';candidates[0].s.practiceControl=true;}
+ }
  const scene=elements.filter(e=>isSolidBuilding(e)||e.tags?.amenity==='parking'||e.tags?.natural||e.tags?.landuse||e.tags?.leisure==='park'||e.tags?.shop||e.tags?.barrier||e.tags?.power||e.tags?.highway==='footway'||e.tags?.highway==='street_lamp'||e.tags?.highway==='crossing'||e.tags?.waterway);
  const rules=elements.filter(e=>e.type==='node'&&['stop','speed_camera'].includes(e.tags?.highway));
+ const encounterRoads=roads.map(r=>({id:r.id,tags:r.tags,points:r.geometry.map(p=>proj.toLocal([p.lon,p.lat]))}));
+ const encounterSignals=prepareSignalLayouts(merged.map(s=>({...s,...proj.toLocal([s.lon,s.lat])})),encounterRoads);
+ const encounters=new StreetEncounters({roads:encounterRoads,signals:encounterSignals,nodes:scene.filter(e=>e.type==='node').map(e=>({...e,...proj.toLocal([e.lon,e.lat])})),route:local,features:sceneFeatures({elements:scene},proj),theme:def.theme});
+ def.situations={signalCrosswalks:encounters.crossings.filter(c=>c.signal).length,unsignalCrosswalks:encounters.crossings.filter(c=>!c.signal).length,police:encounters.officers.length};
+ if(encounters.crossings.length){def.features.push('보행자 횡단');def.assessment.push('횡단보도 보행자에게 양보');}
+ if(def.situations.police)def.features.push('경찰관 순찰 구간');
  const bundle={id:def.id,source:'OpenStreetMap contributors; saved route geometry',origin,reference:city?.reference,roads:{elements:roads},scene:{elements:scene},signals:merged,crossings:crossing,rules,route,parking,tolls};
  const minDriving=route.distance/(def.pace/3.6)/60+1.5+merged.filter(s=>isNear(s,28)).length*.15+(tolls.length?1:0);
  if(minDriving>10)throw Error(`${def.id} is too long: ${minDriving.toFixed(1)} min`);
+ if(def.practice){const low=Math.max(3,Math.ceil(minDriving));def.minutes=[low,Math.min(10,low+2)];}
  def.region??='오키나와';def.origin=origin;def.reference=city?.reference;def.distance=Math.round(route.distance);def.signals=merged.length;def.bundle=`./data/courses/${def.id}.json`;
  def.preview=route.geometry.coordinates.filter((_,i)=>i%Math.max(1,Math.floor(local.length/80))===0);
  def.mapSource=`https://www.openstreetmap.org/#map=16/${route.geometry.coordinates[0][1]}/${route.geometry.coordinates[0][0]}`;

@@ -29,6 +29,17 @@ test('course route geometry has continuous road coverage and usable destination 
 test('preparation steps allow returning but prevent skipping uncompleted steps',()=>{
  assert.equal(canVisitStep(1,3),true);assert.equal(canVisitStep(3,3),true);assert.equal(canVisitStep(4,3),false);assert.equal(canVisitStep(5,4),false);assert.equal(canVisitStep(2.5,4),false);
 });
+test('urban practice courses repeatedly turn both ways instead of long uninterrupted straights',async()=>{
+ for(const c of catalog.courses.filter(c=>['city','urban'].includes(c.theme))){
+  assert.ok(c.practice.left>=2&&c.practice.right>=2,c.id);assert.ok(c.practice.longestStraight<=180,c.id);
+  assert.ok(c.practice.serviceMetres<c.distance*.3,c.id+' should primarily use streets, not circle parking aisles');
+  const b=await read('../'+c.bundle),steps=b.route.legs.flatMap(l=>l.steps);
+  assert.ok(steps.filter(s=>s.maneuver.modifier==='left').length>=2,c.id);
+  assert.ok(steps.filter(s=>s.maneuver.modifier==='right').length>=2,c.id);
+  assert.ok(steps.filter(s=>s.maneuver.type==='turn').every(s=>s.maneuver.modifier!=='uturn'),c.id);
+  assert.ok(b.route.distance<1500,c.id);
+ }
+});
 test('ETC keeps a fast vehicle out, opens at low speed, and requires both gates',()=>{
  const s=new TollSession([{id:'in',kind:'entry',x:0,y:0,heading:0},{id:'out',kind:'exit',x:0,y:-100,heading:0}]);
  s.update(.1,{x:0,y:20,speed:10});assert.equal(s.gates[0].state,'closed');

@@ -215,3 +215,63 @@ body.driving[data-drive-layout="landscape"] #violation-warning {bottom:calc(126p
  body.driving[data-drive-layout="portrait"] .touch-tools button {font-size:10px;}
  body.driving[data-drive-layout="portrait"] .live-score {display:none;}
 }
+
+/* Landscape thumb islands. No control spans the map or central instruments. */
+body.driving[data-drive-layout="landscape"] {
+ --drive-pad:clamp(48px,5.7vw,60px);
+ --control-gap:4px;
+ --control-edge:10px;
+ --control-bottom:calc(12px + var(--safe-bottom));
+ --control-row:calc(var(--control-bottom) + var(--drive-pad) + 18px);
+}
+body.driving[data-drive-layout="landscape"] #drive-toolbar,
+body.driving[data-drive-layout="landscape"] #drive-toolbar > div,
+body.driving[data-drive-layout="landscape"] .touch-tools {display:contents;}
+body.driving[data-drive-layout="landscape"] #drive-toolbar[hidden] {display:none;}
+body.driving[data-drive-layout="landscape"] #nav-closer {display:none;}
+body.driving[data-drive-layout="landscape"] .touch-steer {
+ left:calc(var(--control-edge) + var(--safe-left));bottom:var(--control-bottom);gap:var(--control-gap);
+}
+body.driving[data-drive-layout="landscape"] .touch-pedals {
+ right:calc(var(--control-edge) + var(--safe-right));bottom:var(--control-bottom);gap:var(--control-gap);
+}
+body.driving[data-drive-layout="landscape"] :is(.touch-steer,.touch-pedals) button,
+body.driving[data-drive-layout="landscape"] .touch-pedals button:last-child {
+ width:var(--drive-pad);height:calc(var(--drive-pad) + 12px);font-size:15px;
+}
+body.driving[data-drive-layout="landscape"] .touch-tools button,
+body.driving[data-drive-layout="landscape"] #drive-toolbar button {
+ position:fixed;z-index:17;box-sizing:border-box;pointer-events:auto;
+ width:var(--drive-pad);height:44px;min-height:44px;padding:4px 2px;font-size:10px;
+ border-radius:8px;background:#102d38ee;border:1px solid #adc7be77;
+}
+body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-left"],
+body.driving[data-drive-layout="landscape"] .touch-tools [data-action="nav"] {left:calc(var(--control-edge) + var(--safe-left));}
+body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-right"],
+body.driving[data-drive-layout="landscape"] .touch-tools [data-action="pause"] {left:calc(var(--control-edge) + var(--safe-left) + var(--drive-pad) + var(--control-gap));}
+body.driving[data-drive-layout="landscape"] .touch-tools :is([data-action="blink-left"],[data-action="blink-right"]) {bottom:var(--control-row);}
+body.driving[data-drive-layout="landscape"] .touch-tools :is([data-action="nav"],[data-action="pause"]) {display:block;bottom:calc(var(--control-row) + 48px);}
+body.driving[data-drive-layout="landscape"] .touch-tools [data-action="brake"] {
+ bottom:var(--control-row);right:calc(var(--control-edge) + var(--safe-right));width:calc(var(--drive-pad)*2 + var(--control-gap));
+}
+body.driving[data-drive-layout="landscape"] #drive-toolbar :is(#gear-forward,#gear-reverse) {bottom:calc(var(--control-row) + 48px);}
+body.driving[data-drive-layout="landscape"] #gear-forward {right:calc(var(--control-edge) + var(--safe-right) + var(--drive-pad) + var(--control-gap));}
+body.driving[data-drive-layout="landscape"] #gear-reverse {right:calc(var(--control-edge) + var(--safe-right));}
+body.driving :is(#touch-controls,#drive-toolbar) button {touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+body.driving[data-drive-layout="landscape"] #drive-toolbar button[aria-pressed="true"] {background:#355f4d;color:#efffe9;border-color:#b9ebba;}
+@media(max-width:700px) and (orientation:landscape){
+ /* On a narrow phone keep the area above the arrows only one button wide. */
+ body.driving[data-drive-layout="landscape"] .touch-steer {bottom:calc(8px + var(--safe-bottom));}
+ body.driving[data-drive-layout="landscape"] .touch-steer button {height:44px;min-height:44px;}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-left"] {bottom:calc(var(--control-row) + 48px);}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-right"] {left:calc(var(--control-edge) + var(--safe-left));}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="nav"] {left:auto;right:calc(var(--control-edge) + var(--safe-right));bottom:var(--control-row);}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="brake"] {width:var(--drive-pad);right:calc(var(--control-edge) + var(--safe-right) + var(--drive-pad) + var(--control-gap));}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="pause"] {left:calc(var(--control-edge) + var(--safe-left));top:calc(8px + var(--safe-top));bottom:auto;}
+ body.driving[data-drive-layout="landscape"] #help-open {display:none;}
+ body.driving[data-drive-layout="landscape"] header {padding-left:calc(64px + var(--safe-left));}
+}
+#control-feedback {position:fixed;z-index:22;top:115px;left:50%;transform:translateX(-50%);width:max-content;max-width:min(450px,80vw);padding:10px 14px;border:1px solid #9cceac;background:#123231f5;color:#e8f6ea;border-radius:8px;font-size:13px;line-height:1.5;pointer-events:none;}
+body:not(.driving) #control-feedback {display:none;}
+body.driving[data-drive-layout="landscape"] #control-feedback {top:calc(80px + var(--safe-top));max-width:calc(100% - 270px);font-size:12px;padding:7px 10px;}
+body.driving[data-drive-layout="portrait"] #control-feedback {top:calc(185px + var(--safe-top));}

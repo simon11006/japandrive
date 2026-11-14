@@ -158,6 +158,8 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
  }
  // Crossings follow mapped crossing nodes, and are perpendicular to the road.
  const seen=[];for(const n of nodes.filter(n=>n.tags?.highway==='crossing')){
+  if(renderer.encounters?.crossings.some(c=>distance(c,n)<6))continue;
+  if(renderer.signals.some(s=>s.approaches?.some(a=>distance(n,{x:a.stop.x+Math.sin(a.heading)*3,y:a.stop.y-Math.cos(a.heading)*3})<6)))continue;
   if(!nearRoute(n)||seen.some(p=>distance(n,p)<7))continue;const hit=nearestRoad(n,roads);if(hit.distance>10||hit.road.tags.highway==='motorway')continue;seen.push(n);
   const h=hit.heading,r={x:Math.cos(h),y:Math.sin(h)},f={x:Math.sin(h),y:-Math.cos(h)},w=roadWidth(hit.road.tags);
   for(let x=-w/2+.6;x<w/2-.4;x+=.85){const p=hit.point;add('mark',[[x,-1.8],[x+.43,-1.8],[x+.43,1.8],[x,1.8]].map(([a,b])=>({x:p.x+r.x*a+f.x*b,y:p.y+r.y*a+f.y*b})),.19);}

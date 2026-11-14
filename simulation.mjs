@@ -73,9 +73,9 @@ export function parkingStatus(state, car, bay, heldSeconds = 0) {
   const delta = Math.abs(wrapAngle(state.heading - (bay.heading || 0)));
   const angle = Math.min(delta, Math.PI - delta);
   const aligned = bay.type === "area" || angle < Math.PI / 18,
-    stopped = state.speed < 0.1;
-  const ready = inside && aligned && stopped && state.parkingBrake;
-  return { inside, aligned, stopped, angle, ready, complete: ready && heldSeconds >= 2 };
+    stopped = Math.abs(state.speed) < 0.1;
+  const ready = inside && stopped;
+  return { inside, aligned, stopped, angle, ready, complete: ready && heldSeconds >= 1 };
 }
 // A move into an obstacle is undone. But when the car was already touching it
 // (another car stopped against it, an approximate map footprint), only moves
@@ -105,20 +105,22 @@ export function signalPhase(signal, heading, time) {
   if(signal.profile==='flash')return Math.abs(Math.cos(heading-(signal.axis??0)))>.707?'flash-red':'flash-yellow';
   if(signal.profile==='arrow'){
     const main=Math.abs(Math.cos(heading-(signal.axis??0)))>.707;
-    const phase=(time+(hash(signal.timingId??signal.id)%80)+(main?0:40))%80;
-    return phase<24?'green':phase<27?'yellow':'red';
+    const phase=(time+(hash(signal.timingId??signal.id)%52)+(main?0:26))%52;
+    // NPA 2024 guideline: green → yellow → red + right arrow → yellow → all-red.
+    return phase<12?'green':phase<15||(phase>=20&&phase<23)?'yellow':'red';
   }
-  const phase = (time + (hash(signal.timingId ?? signal.id) % 66)) % 66;
+  // Short practice cycles; retain yellow and an all-red clearance interval.
+  const phase = (time + (hash(signal.timingId ?? signal.id) % 44)) % 44;
   const axis = signal.axis ?? 0;
   const main = Math.abs(Math.cos(heading - axis)) > 0.707;
-  const t = main ? phase : (phase + 33) % 66;
-  return t < 27 ? "green" : t < 30 ? "yellow" : "red";
+  const t = main ? phase : (phase + 22) % 44;
+  return t < 16 ? "green" : t < 19 ? "yellow" : "red";
 }
 export function signalRightArrow(signal,heading,time){
   if(signal.profile!=='arrow')return false;
   const main=Math.abs(Math.cos(heading-(signal.axis??0)))>.707;
-  const phase=(time+hash(signal.timingId??signal.id)%80+(main?0:40))%80;
-  return phase>=27&&phase<35;
+  const phase=(time+hash(signal.timingId??signal.id)%52+(main?0:26))%52;
+  return phase>=15&&phase<20;
 }
 export function synchronizeSignals(signals) {
   const groups = [];
@@ -214,11 +216,17 @@ export class TrafficSimulation {
     );
     const score = (e) => distance(e.from, start) + (hash(e.roadId + ":" + e.id) % 75);
     const sorted = candidates.sort((a, b) => score(a) - score(b));
-    const slots = sorted.flatMap((edge) => {
+    const rows = sorted.map((edge) => {
       const result = [{ edge, along: edge.length * 0.35 }];
       for (let d = 12; d < edge.length - 6; d += 11) result.push({ edge, along: d });
       return result;
     });
+    // Interleave roads and directions before adding another car to the same
+    // edge. Flattening each long edge first filled the entire traffic budget
+    // with one queue and left opposing/cross traffic absent.
+    const slots=[];
+    for(let depth=0;depth<Math.max(0,...rows.map(row=>row.length));depth++)
+      for(const row of rows)if(row[depth])slots.push(row[depth]);
     for (let j = 0; j < slots.length && this.cars.length < count; j++) {
       const { edge, along } = slots[j],
         i = this.cars.length;
@@ -304,6 +312,8 @@ export class TrafficSimulation {
     }
     for (const car of this.cars) {
       let target = car.edge.highway==='motorway'?Math.max(car.desired,20):car.desired;
+      const pedestrianStop=this.pedestrianStop?.(car)??Infinity;
+      if(Number.isFinite(pedestrianStop))target=Math.min(target,Math.sqrt(4*Math.max(0,pedestrianStop)));
       const f = forward(car.heading);
       for (const other of bodies) {
         if (other === car) continue;
@@ -357,13 +367,21 @@ export class TrafficSimulation {
         const ahead=(s.x-car.x)*f.x+(s.y-car.y)*f.y,lateral=Math.abs((s.x-car.x)*f.y-(s.y-car.y)*f.x);
         if(ahead<0||lateral>radius)continue;
         const id=s.timingId??s.id,lock=this.junctionOwners.get(id),entry=ahead-radius-car.length/2;
+        const turn=car.next?wrapAngle(car.next.heading-car.heading):0;
+        const oncoming=turn>.4&&turn<2.5&&!signalRightArrow(s,car.heading,time)&&bodies.some(other=>{
+          if(other===car||other.barrier||Math.cos(other.heading-car.heading)>-.7)return false;
+          const of=forward(other.heading),toCross=(s.x-other.x)*of.x+(s.y-other.y)*of.y;
+          const crossOffset=Math.abs((s.x-other.x)*of.y-(s.y-other.y)*of.x);
+          return toCross>-other.length&&toCross<Math.max(18,(other.speed||0)*5)&&crossOffset<radius&&other.speed>.3;
+        });
+        if(oncoming&&entry>-.5){target=Math.min(target,Math.sqrt(5*Math.max(0,entry-.5)));continue;}
         if(lock&&lock.car!==car&&entry>-.5){
           target=Math.min(target,Math.sqrt(5*Math.max(0,entry-.5)));
         }else if(!lock&&entry<4&&target>.2){
           this.junctionOwners.set(id,{car,center:s,radius,entered:d<radius});
         }
       }
-      car.braking = target < car.speed - 0.2;
+      car.braking = target < 0.15 || target < car.speed - 0.2;
       const speed = Math.max(0, car.speed + Math.max(-4.5 * dt, Math.min(1.4 * dt, target - car.speed)));
       // Never advance into another body (including the player's car).
       const probe = { ...car, x: car.x + f.x * speed * dt * 4, y: car.y + f.y * speed * dt * 4 };
@@ -387,6 +405,7 @@ export class TrafficSimulation {
         if (!next) {
           car.along = car.edge.length - 0.1;
           car.speed = 0;
+          car.braking = true;
           break;
         }
         car.edge = next;

@@ -1,4 +1,6 @@
 import { t } from "./i18n.mjs";
+import {nearestOnSegment} from './simulation.mjs';
+import {navigationBanner} from './navigation.mjs';
 // In-car navigation screen in the familiar style of a phone map app: light
 // map, blue route, green turn banner on top, arrival bar at the bottom.
 // The map data is OpenStreetMap; only the look follows phone navigation.
@@ -31,7 +33,7 @@ export function roadRank(tags = {}) {
   return MOTORWAY.test(h) ? 3 : MAJOR.test(h) ? 2 : h === "service" ? 0 : 1;
 }
 
-export function drawNavMap(c, w, h, scale, { roads, features, route, goal, convert }) {
+export function drawNavMap(c, w, h, scale, { roads, features, route, goal, parkingPoints, convert, routeIndex, currentPosition, turnPoint }) {
   c.fillStyle = NAV_COLORS.land;
   c.fillRect(0, 0, w, h);
   const path = (points) => {
@@ -83,13 +85,27 @@ export function drawNavMap(c, w, h, scale, { roads, features, route, goal, conve
       c.stroke();
     }
   if (route.length > 1) {
-    path(route);
+    let remaining=route;
+    if(Number.isInteger(routeIndex)&&currentPosition&&route[routeIndex+1]){
+      const snapped=nearestOnSegment(currentPosition,route[routeIndex],route[routeIndex+1]).point;
+      path([...route.slice(0,routeIndex+1),snapped]);c.lineWidth=Math.max(9,scale*4);c.strokeStyle='#aeb8c5';c.stroke();
+      remaining=[snapped,...route.slice(routeIndex+1)];
+    }
+    path(remaining);
     c.lineWidth = Math.max(11, scale * 5.5) + 4;
     c.strokeStyle = NAV_COLORS.routeCasing;
     c.stroke();
     c.lineWidth = Math.max(11, scale * 5.5);
     c.strokeStyle = NAV_COLORS.route;
     c.stroke();
+  }
+  if(turnPoint){
+    const q=convert(turnPoint);c.beginPath();c.arc(q.x,q.y,Math.max(12,scale*2.8),0,Math.PI*2);c.fillStyle='#1a73e833';c.fill();
+    c.strokeStyle='#fff';c.lineWidth=3;c.stroke();
+  }
+  if (parkingPoints?.length) {
+    c.beginPath();parkingPoints.forEach((p,i)=>{const q=convert(p);i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y);});c.closePath();
+    c.fillStyle='#72edaa66';c.fill();c.strokeStyle='#aaffbd';c.lineWidth=3;c.stroke();
   }
   if (goal) {
     const q = convert(goal);
@@ -205,12 +221,12 @@ function fit(c, text, maxWidth, size, weight = "bold") {
 
 // Banner and arrival bar drawn over the map.
 export function drawNavOverlay(c, w, h, info = {}) {
-  const banner = Math.round(h * 0.25);
-  c.fillStyle = NAV_COLORS.banner;
+  const banner = Math.round(h * navigationBanner(info)),close=navigationBanner(info)>.25;
+  c.fillStyle = info.alert?'#a23126':NAV_COLORS.banner;
   c.fillRect(0, 0, w, banner);
-  c.fillStyle = NAV_COLORS.bannerDark;
+  c.fillStyle = info.alert?'#80251e':NAV_COLORS.bannerDark;
   c.fillRect(0, 0, banner, banner);
-  drawTurnIcon(c, banner / 2, banner / 2, banner * 0.62, info.maneuver);
+  drawTurnIcon(c, banner / 2, banner / 2, banner * (close?.72:.62), info.maneuver);
   c.fillStyle = "#fff";
   c.textAlign = "left";
   if (info.parking) {
@@ -219,11 +235,20 @@ export function drawNavOverlay(c, w, h, info = {}) {
     fit(c, info.instruction || "", w - banner - 30, Math.round(banner * 0.2), "normal");
     c.fillText(t(info.instruction || ""), banner + 18, banner * 0.8);
   } else {
-    fit(c, metres(info.toTurn ?? 0), w * 0.5, Math.round(banner * 0.42));
-    c.fillText(metres(info.toTurn ?? 0), banner + 18, banner * 0.5);
-    const line = [info.action, info.street].filter(Boolean).join(" · ");
+    const distance=info.toTurn<=8&&info.maneuver?.type==='turn'?'지금':metres(info.toTurn??0);
+    const primary=close?[distance,info.action].filter(Boolean).join('  '):distance;
+    fit(c, primary, w-banner-30, Math.round(banner * 0.42));
+    c.fillText(t(primary), banner + 18, banner * 0.5);
+    const line = info.lesson || [info.action, info.street].filter(Boolean).join(" · ");
     fit(c, line, w - banner - 30, Math.round(banner * 0.21), "normal");
     c.fillText(t(line), banner + 18, banner * 0.84);
+  }
+  if(info.then&&!info.parking){
+    const y=banner,small=Math.round(h*.085),width=Math.round(w*.34);
+    c.fillStyle=NAV_COLORS.bannerDark;c.fillRect(0,y,width,small);
+    drawTurnIcon(c,small/2,y+small/2,small*.65,info.then.maneuver);
+    c.fillStyle='#fff';c.textAlign='left';fit(c,`이어서 ${metres(info.then.distance)}`,width-small-10,small*.46);
+    c.fillText(t(`이어서 ${metres(info.then.distance)}`),small+4,y+small*.69);
   }
   // Arrival bar.
   const bar = Math.round(h * 0.17),

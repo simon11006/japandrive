@@ -20,7 +20,7 @@ export function roadsideSpace(roads) {
   return (p,margin=.8)=>(cells.get(Math.floor(p.x/size)+':'+Math.floor(p.y/size))||[])
     .every(s=>nearestOnSegment(p,s.a,s.b).distance>=s.half+margin);
 }
-export function prepareSignalLayouts(signals,roads){
+export function roadJunctions(roads){
   const vertices=new Map();
   for(const road of roads)road.points.forEach((p,i)=>{
     const key=p.x.toFixed(1)+':'+p.y.toFixed(1);if(!vertices.has(key))vertices.set(key,{...p,arms:[]});
@@ -30,7 +30,10 @@ export function prepareSignalLayouts(signals,roads){
       if(!v.arms.some(a=>Math.abs(wrapAngle(a.heading-h))<.15))v.arms.push({heading:h,width:roadWidth(road.tags),oneway:['yes','1','true','-1'].includes(road.tags.oneway),incoming:road.tags.oneway==='-1'?j>i:!['yes','1','true'].includes(road.tags.oneway)||j<i});
     }
   });
-  const junctions=[...vertices.values()].filter(v=>v.arms.length>=3),clear=roadsideSpace(roads);
+  return [...vertices.values()].filter(v=>v.arms.length>=3);
+}
+export function prepareSignalLayouts(signals,roads){
+  const junctions=roadJunctions(roads),clear=roadsideSpace(roads);
   for(const s of signals){
     let hit={distance:Infinity};
     for(const r of roads)for(let i=1;i<r.points.length;i++){
@@ -45,7 +48,7 @@ export function prepareSignalLayouts(signals,roads){
     s.approaches=arms.filter(a=>a.incoming).map(a=>{
       const f=forward(a.heading),r={x:Math.cos(a.heading),y:Math.sin(a.heading)};
       const cross=arms.filter(b=>Math.abs(Math.sin(b.heading-a.heading))>.5);
-      const setback=Math.max(5,...cross.map(b=>b.width/2+3));
+      const setback=Math.max(8,...cross.map(b=>b.width/2+6));
       const at=(along,side)=>({x:s.x+f.x*along+r.x*side,y:s.y+f.y*along+r.y*side});
       const lane=a.oneway?0:-Math.min(1.65,a.width*.23),head=at(setback,lane);
       let pole,best=Infinity;

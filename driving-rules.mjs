@@ -20,7 +20,23 @@ export const VIOLATIONS = {
   collision: { name: "차량·시설 접촉", penalty: 15 },
   camera: { name: "단속카메라 통과 중 속도 초과", penalty: 0 },
   blinker: { name: "방향지시등 미사용", penalty: 5 },
+  pedestrian: { name: "횡단보도 보행자 보호 미준수", penalty: 15 },
 };
+// The left side is relative to the driver's direction, not the order in
+// which a map way was recorded. Inside a junction, a legal right turn may
+// temporarily cross the opposing half, so evaluate the exit lane afterwards.
+export function leftTrafficStatus(state,lane,{inLot=false,inJunction=false}={}) {
+  if(!lane||inLot||inJunction||state.gear<0)return {wrong:false,correct:false};
+  const tags=lane.road.tags||{},cos=Math.cos(state.heading-lane.heading);
+  const oneway=['yes','1','true','-1'].includes(tags.oneway);
+  const width=Number.parseFloat(tags.width)||(Number.parseInt(tags.lanes,10)||2)*3;
+  if(lane.distance>width/2||Math.abs(cos)<.8)return {wrong:false,correct:false};
+  if(oneway){const wrong=tags.oneway==='-1'?cos>0:cos<0;return {wrong,correct:!wrong};}
+  if(tags.highway==='service'&&!(Number(tags.lanes)>=2))return {wrong:false,correct:false};
+  const direction=cos>=0?lane.heading:lane.heading+Math.PI;
+  const side=(state.x-lane.point.x)*Math.cos(direction)+(state.y-lane.point.y)*Math.sin(direction);
+  return {wrong:side>.75,correct:side<-.4,side};
+}
 export class DrivingScore {
   constructor() {
     this.events = [];

@@ -1,5 +1,6 @@
 import { t } from "./i18n.mjs";
-import {prepareSignalLayouts,roadsideSpace} from "./junctions.mjs";
+import {prepareSignalLayouts,roadsideSpace,roadJunctions} from "./junctions.mjs";
+import {stripPolygon,approachMarkings,maneuverGuides} from './road-markings.mjs';
 import { pointInRing } from './map-data.mjs';
 import { buildCourseBuildings, buildCourseEnvironment, updateTollObjects } from './course-environment.mjs';
 import * as THREE from "./vendor/three.module.js";
@@ -16,6 +17,9 @@ import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
 import { makeCarModel } from "./car-model.mjs";
 import { drawNavOverlay } from "./nav-display.mjs";
+import { navigationScale } from './navigation.mjs';
+import {StreetEncounters,pedestrianGreen} from './street-encounters.mjs';
+import {PeopleModels} from './people-model.mjs';
 import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
 import { steeringLimit } from "./vehicles.mjs";
 import {
@@ -239,7 +243,7 @@ export function makeTrafficCar(kind = "sedan", color = "#e8eceb") {
       mat("#f4f6c8", 0.3, { emissive: "#f2e4a5", emissiveIntensity: 0.3 }),
     );
     const rear = mat("#9f2526", 0.4, { emissive: "#f33325", emissiveIntensity: 0.12 });
-    box(g, [0.31, 0.12, 0.04], [x, 0.7, length / 2 + 0.02], rear);
+    box(g, [0.38, 0.18, 0.05], [x, 0.69, length / 2 + 0.025], rear);
     lamps.push(rear);
     for (const z of [-length * 0.31, length * 0.31]) {
       const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.17, 12), rubber);
@@ -248,6 +252,10 @@ export function makeTrafficCar(kind = "sedan", color = "#e8eceb") {
       g.add(wheel);
     }
   }
+  // High-mounted stop lamp sits against the sloping rear glass.
+  const highStop = mat('#771013', .4, { emissive:'#ff281c', emissiveIntensity:.1 });
+  box(g, [.48,.075,.045], [0, high-.1, rear+(length*.36-rear)*(.1/(high-low))+.028], highStop);
+  lamps.push(highStop);
   box(g, [0.34, 0.12, 0.02], [0, 0.5, length / 2 + 0.03], mat("#ece9dc"));
   g.userData.lamps = lamps;
   g.userData.body = body;
@@ -473,6 +481,7 @@ export class DriveRenderer {
     this.bays = bays || [];
     this.signals = signals || [];
     this.lastNav = -Infinity;
+    this.mapScale = null;
     this.ocean.position.x = 0;
     this.ocean.position.z = 0;
     disposeGroup(this.world);
@@ -503,6 +512,19 @@ export class DriveRenderer {
     this.setBuildings(features || []);
     this.setParking(this.bays);
     this.setSignals(this.signals, roads);
+    this.encounters=course?new StreetEncounters({...course,roads,signals:this.signals,features}):null;
+    this.peopleModels??=new PeopleModels(this.scene);
+    if(this.encounters){
+      const paint=[];
+      for(const c of this.encounters.crossings.filter(c=>!c.signal)){
+        const f=forward(c.heading),r={x:Math.cos(c.heading),y:Math.sin(c.heading)};
+        const at=(x,y)=>({x:c.x+r.x*x+f.x*y,y:c.y+r.y*x+f.y*y});
+        for(let x=-c.width/2+.3;x<c.width/2-.3;x+=.95)paint.push([at(x,-1.45),at(Math.min(x+.5,c.width/2-.2),-1.45),at(Math.min(x+.5,c.width/2-.2),1.45),at(x,1.45)]);
+        for(const side of [-1,1])paint.push(stripPolygon(at(side*(-c.width/2+.2),-side*3),at(-side*.1,-side*3),.5));
+      }
+      this.paintGround(this.environmentGroup,paint,'#fffdef',.25);
+    }
+    if(course?.maneuvers)this.setManeuvers(course.route,course.maneuvers,roads);
     this.setCar(car);
     if (projection) this.addAerial(projection, course?.aerial);
     if (course) buildCourseEnvironment(this, {...course, roads, features, coast});
@@ -596,6 +618,7 @@ export class DriveRenderer {
     if (signature === this.lastRoads) return;
     this.lastRoads = signature;
     disposeGroup(this.roadsGroup);
+    const junctions=roadJunctions(roads).map(j=>({...j,radius:Math.max(...j.arms.map(a=>a.width/2))+1}));
     const p = [],
       mark = [],
       shoulders = [];
@@ -608,6 +631,20 @@ export class DriveRenderer {
         dz = b.y - a.y,
         len = Math.hypot(dx, dz);
       if (!len) return;
+      // Do not carry edge/centre lines straight across a crossing road.
+      if(array===mark){
+        const nearby=junctions.filter(j=>Math.min(a.x,b.x)-j.radius<=j.x&&Math.max(a.x,b.x)+j.radius>=j.x&&Math.min(a.y,b.y)-j.radius<=j.y&&Math.max(a.y,b.y)+j.radius>=j.y);
+        if(nearby.length){
+          for(let d=0;d<len;d+=1.5){
+            const end=Math.min(d+1.5,len),middle=(d+end)/2/len;
+            if(nearby.some(j=>Math.hypot(a.x+dx*middle-j.x,a.y+dz*middle-j.y)<j.radius))continue;
+            const aa={x:a.x+dx*d/len,y:a.y+dz*d/len},bb={x:a.x+dx*end/len,y:a.y+dz*end/len};
+            const polygon=stripPolygon(aa,bb,width).map(q=>({x:q.x+dz/len*offset,y:q.y-dx/len*offset}));
+            addPolygon(array,polygon,lift+.1);
+          }
+          return;
+        }
+      }
       const nx = dz / len,
         nz = -dx / len;
       const points = [
@@ -659,7 +696,7 @@ export class DriveRenderer {
     for (const [data, material, scale] of [
       [shoulders, mat("#ffffff", 0.95, { map: this.textures.concrete }), 3],
       [p, mat("#ffffff", 0.93, { map: this.textures.asphalt }), 5],
-      [mark, mat("#f4f2e4", 0.7), 0],
+      [mark, new THREE.MeshBasicMaterial({color:'#f4f2e4'}), 0],
     ]) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.Float32BufferAttribute(data, 3));
@@ -763,33 +800,47 @@ export class DriveRenderer {
     m.rotation.y = heading;
     parent.add(m);
   }
+  paintGround(group, polygons, color, lift, opacity=1) {
+    const positions=polygons.flatMap(polygon=>this.surface.drape(polygon,lift)
+      .flatMap(p=>[p.x-this.base.x,p.height,p.y-this.base.y]));
+    if(!positions.length)return;
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    group.add(new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide,transparent:opacity<1,opacity,depthWrite:opacity===1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1})));
+  }
+  setManeuvers(route, steps, roads) {
+    const arrows=[],guides=[];
+    for(const guide of maneuverGuides(route,steps,roads)){
+      const {position:p,turn}=guide,f=forward(p.heading),r={x:Math.cos(p.heading),y:Math.sin(p.heading)};
+      const at=([side,ahead])=>({x:p.x+r.x*side+f.x*ahead,y:p.y+r.y*side+f.y*ahead});
+      const uturn=guide.modifier==='uturn';
+      const path=uturn?[[.5,-2],[.5,1],[.35,1.5],[-.35,1.5],[-.5,1],[-.5,-.5]]:[[0,-2],[0,.3],[turn*.2,.8],[turn,.8]];
+      for(let i=1;i<path.length;i++)arrows.push(stripPolygon(at(path[i-1]),at(path[i]),.2));
+      const end=path.at(-1);
+      arrows.push(uturn
+        ? [at([end[0]-.48,end[1]+.65]),at([end[0]+.48,end[1]+.65]),at([end[0],end[1]-.25])]
+        : [at([end[0]-turn*.65,end[1]-.48]),at([end[0]-turn*.65,end[1]+.48]),at([end[0]+turn*.25,end[1]])]);
+      // A mint dashed line is route assistance, distinct from white road paint.
+      for(let i=1;i<guide.path.length;i+=3)guides.push(stripPolygon(guide.path[i-1],guide.path[Math.min(i+1,guide.path.length-1)],.17));
+    }
+    this.paintGround(this.roadsGroup,arrows,'#f6f4df',.205);
+    this.paintGround(this.roadsGroup,guides,'#70dfcb',.21,.85);
+  }
   setParking(bays) {
     disposeGroup(this.parkingGroup);
     for (const [i, b] of bays.entries()) {
-      const target = b.target ?? i === 1,
-        points = b.points.map((p) => this.local(p, 0.15));
-      points.push(points[0].clone());
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(points),
-        new THREE.LineBasicMaterial({ color: target ? "#b6f5a5" : "#f0efdf" }),
-      );
-      this.parkingGroup.add(line);
-      const positions = this.surface
-          .drape(b.points, 0.14)
-          .flatMap((p) => [p.x - this.base.x, p.height, p.y - this.base.y]),
-        geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      const fill = new THREE.Mesh(
-        geometry,
-        new THREE.MeshBasicMaterial({
-          color: "#a2e28c",
-          transparent: true,
-          opacity: target ? 0.16 : 0.03,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        }),
-      );
-      this.parkingGroup.add(fill);
+      const target = b.target ?? i === 1;
+      this.paintGround(this.parkingGroup,[b.points],target?'#48db8a':'#bcc7ad',.23,target?.3:.04);
+      const borders=b.points.map((p,i)=>stripPolygon(p,b.points[(i+1)%b.points.length],target?.18:.1));
+      this.paintGround(this.parkingGroup,borders,target?'#beffbd':'#f0efdf',.25);
+      if(target){
+        const f=forward(b.heading),r={x:Math.cos(b.heading),y:Math.sin(b.heading)};
+        const at=([x,y])=>({x:b.center.x+r.x*x+f.x*y,y:b.center.y+r.y*x+f.y*y});
+        const letter=[[-.35,-.7],[-.35,.7],[.35,.7],[.35,.1],[-.35,.1]];
+        this.paintGround(this.parkingGroup,letter.slice(1).map((p,i)=>stripPolygon(at(letter[i]),at(p),.18)),'#e5ffcf',.27);
+        const marker=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTexture('P  목표 주차','#d5ffca','#174735'),depthTest:true}));
+        marker.position.copy(this.local({x:b.center.x+f.x*b.length/2,y:b.center.y+f.y*b.length/2},2.5));marker.scale.set(3.6,.9,1);
+        this.parkingGroup.add(marker);
+      }
     }
   }
   setSignals(signals, roads) {
@@ -797,6 +848,7 @@ export class DriveRenderer {
     this.signalHeads = [];
     prepareSignalLayouts(signals, roads);
     const metal=mat("#747e7f",.4,{metalness:.5});
+    const stops=[],backings=[],crossings=[];
     for(const s of signals){
       const heads=[];
       for(const approach of s.approaches){
@@ -813,10 +865,17 @@ export class DriveRenderer {
         }
         let arrow;
         if(s.profile==='arrow'){
-          arrow=new THREE.Mesh(new THREE.PlaneGeometry(.5,.32),new THREE.MeshBasicMaterial({map:labelTexture('→','#55ffc2','#132a28')}));
-          arrow.position.set(.42,-.43,.16);head.add(arrow);
+          box(head,[.47,.47,.30],[.43,-.49,0],mat('#29383d'));
+          const texture=canvasTexture(128,128,c=>{
+            c.fillStyle='#080f12';c.fillRect(0,0,128,128);c.strokeStyle='#fff';c.lineWidth=13;c.lineCap='square';c.lineJoin='miter';
+            c.beginPath();c.moveTo(25,64);c.lineTo(98,64);c.moveTo(69,35);c.lineTo(98,64);c.lineTo(69,93);c.stroke();
+          }).texture;
+          arrow=new THREE.Mesh(new THREE.CircleGeometry(.185,32),new THREE.MeshBasicMaterial({map:texture,color:'#55ffc2',toneMapped:false}));
+          arrow.position.set(.43,-.49,.16);head.add(arrow);
+          box(head,[.4,.03,.2],[.43,-.25,.22],metal);
         }
         const pedestrian=new THREE.Mesh(new THREE.PlaneGeometry(.24,.48),new THREE.MeshBasicMaterial({map:labelTexture('人','#dbf0da','#172624')}));
+        pedestrian.visible=s.profile!=='flash';
         // Pedestrian unit belongs on the roadside support, not in the lane.
         if(approach.pole){
           const foot=this.local(approach.pole),top=this.local(approach.pole,5.6),end=this.local(approach.head,5.6);
@@ -827,15 +886,13 @@ export class DriveRenderer {
         }
         this.signalGroup.add(head);
         heads.push({bulbs,arrow,pedestrian,heading:approach.heading});
-        const f=forward(approach.heading),r={x:Math.cos(approach.heading),y:Math.sin(approach.heading)},half=approach.width/2;
-        const left=-half+.2,right=approach.oneway?half-.2:-.1;
-        const polygon=[[left,-.17],[right,-.17],[right,.17],[left,.17]].map(([x,y])=>({x:approach.stop.x+r.x*x+f.x*y,y:approach.stop.y+r.y*x+f.y*y}));
-        const positions=this.surface.drape(polygon,.18).flatMap(p=>[p.x-this.base.x,p.height,p.y-this.base.y]);
-        const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.computeVertexNormals();
-        this.signalGroup.add(new THREE.Mesh(geometry,mat('#f3f0df')));
+        const markings=approachMarkings(approach);stops.push(markings.stop);backings.push(markings.backing);crossings.push(...markings.crossing);
       }
       this.signalHeads.push({signal:s,heads});
     }
+    this.paintGround(this.signalGroup,backings,'#283136',.205);
+    this.paintGround(this.signalGroup,stops,'#fffdec',.22);
+    this.paintGround(this.signalGroup,crossings,'#f8f5e6',.21);
   }
   setCar(car) {
     if (this.lastCar === car.id) return;
@@ -994,7 +1051,7 @@ export class DriveRenderer {
     this.overlayCamera.updateProjectionMatrix();
     const mw = portrait ? Math.min(190, width * 0.28) : Math.min(200, width * 0.145),
       mh = mw * 0.56,
-      top = portrait ? Math.min(224, height * 0.31) : height < 600 ? Math.max(112, height * 0.31) : Math.max(135, height * 0.34 - mh / 2),
+      top = portrait ? Math.min(224, height * 0.31) : width<=700 ? Math.max(64,Math.min(112,height-188-mh)) : height < 600 ? Math.max(112, height * 0.31) : Math.max(135, height * 0.34 - mh / 2),
       glancingLeft = (this.headYaw ?? 0) > 0.4;
     let shown = 0;
     for (const m of this.overlayMirrors) {
@@ -1025,8 +1082,10 @@ export class DriveRenderer {
     const c = this.nav.context,
       w = this.nav.canvas.width,
       h = this.nav.canvas.height;
-    const mapScale =
-      navInfo?.parkingDistance < 35 ? 7 : navInfo?.distanceToTurn < 70 ? 3.8 : speed > 13 ? 1.8 : 2.8;
+    const targetScale=navigationScale(h,speed,navInfo);
+    // Ease into a close view; pull back immediately when necessary to keep
+    // the next junction visible instead of hiding it behind the turn banner.
+    const mapScale=this.mapScale==null?targetScale:Math.min(targetScale,this.mapScale+(targetScale-this.mapScale)*.32);
     this.mapScale = mapScale;
     drawNavigation(c, w, h, mapScale);
     drawNavOverlay(c, w, h, navInfo);
@@ -1146,7 +1205,7 @@ export class DriveRenderer {
         template.traverse((part) => {
           if (!part.isMesh) return;
           const brake = template.userData.lamps.includes(part.material),
-            material = brake ? new THREE.MeshBasicMaterial({ color: "#ffffff" }) : part.material.clone();
+            material = brake ? new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped:false }) : part.material.clone();
           const mesh = new THREE.InstancedMesh(part.geometry, material, 128);
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
           mesh.castShadow = true;
@@ -1175,7 +1234,7 @@ export class DriveRenderer {
           matrix.compose(position, rotation, scale).multiply(part.local);
           part.mesh.setMatrixAt(i, matrix);
           if (part.paint || part.brake) {
-            color.set(part.brake ? (car.braking ? "#ff5845" : "#7b2024") : car.color);
+            color.set(part.brake ? (car.braking ? "#ff3b22" : "#521014") : car.color);
             part.mesh.setColorAt(i, color);
           }
         }
@@ -1187,8 +1246,8 @@ export class DriveRenderer {
       for (const head of item.heads) {
         const phase=signalPhase(item.signal,head.heading,time),flashing=phase.startsWith('flash'),
           which=flashing?(Math.floor(time*2)%2===0?(phase==='flash-red'?2:1):-1):{green:0,yellow:1,red:2}[phase];
-        if(head.arrow)head.arrow.visible=signalRightArrow(item.signal,head.heading,time);
-        head.pedestrian.material.color.set(phase==='green'?'#86efa8':'#ed7c6d');
+        if(head.arrow)head.arrow.material.color.set(signalRightArrow(item.signal,head.heading,time)?'#55ffc2':'#18362c');
+        head.pedestrian.material.color.set(pedestrianGreen({signal:item.signal,heading:head.heading},time)?'#86efa8':'#ed7c6d');
         head.bulbs.forEach((bulb, i) =>
           bulb.material.color.set(
             i === which ? ["#52ffc4", "#ffcb48", "#ff493b"][i] : ["#164c3a", "#55441d", "#4d2427"][i],
@@ -1259,6 +1318,7 @@ export class DriveRenderer {
     if (this.surface) this.setTerrain(state.position);
     if (state.tolls) updateTollObjects(this,state.tolls);
     this.syncTraffic(state.traffic || [], state.time);
+    this.peopleModels?.update(this.encounters?[...this.encounters.people,...this.encounters.officers]:[],this,state.time,state.position);
     if (state.intro) {
       this.interior.visible = false;
       this.externalCar.visible = true;

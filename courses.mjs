@@ -8,20 +8,25 @@ export function courseRoadStore(bundle,proj){
  return {roads,hasCoverage:()=>true,ensure:async()=>{},near:(p)=>roads.filter(r=>r.points.some(q=>distance(p,q)<950))};
 }
 export function courseParking(data,proj){
- const points=data.polygon.map(proj.toLocal);let center=points.reduce((p,q)=>({x:p.x+q.x/points.length,y:p.y+q.y/points.length}),{x:0,y:0});
+ let points=data.polygon.map(proj.toLocal);const lotPoints=points;let center=points.reduce((p,q)=>({x:p.x+q.x/points.length,y:p.y+q.y/points.length}),{x:0,y:0});
  const entry={x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2},rear={x:(points[2].x+points[3].x)/2,y:(points[2].y+points[3].y)/2};
  let heading=headingBetween(entry,rear);
  if(data.type==='area'){
   const angles=[heading,...points.slice(1).map((p,i)=>headingBetween(points[i],p))];
-  const valid=(p,h)=>vehicleCorners({...p,heading:h},{width:2.1,length:5.3}).every(c=>insidePolygon(c,points));
+  // A course has one visible goal bay inside the mapped lot. This rectangle
+  // is a game target, not a claim that OSM contains surveyed painted bays.
+  const valid=(p,h)=>vehicleCorners({...p,heading:h},{width:2.8,length:5.8}).every(c=>insidePolygon(c,lotPoints));
   let found=null;
   for(const h of angles)if(valid(center,h)){found={...center,heading:h};break;}
   if(!found){const xs=points.map(p=>p.x),ys=points.map(p=>p.y);let best=Infinity;
    for(let x=Math.min(...xs)+1;x<Math.max(...xs);x+=1.5)for(let y=Math.min(...ys)+1;y<Math.max(...ys);y+=1.5)for(const h of angles){const p={x,y},d=distance(center,p);if(d<best&&valid(p,h)){best=d;found={...p,heading:h};}}
   }
-  if(found){center={x:found.x,y:found.y};heading=found.heading;}
+  if(!found)throw new Error('목표 주차면을 배치할 공간이 없습니다.');
+  center={x:found.x,y:found.y};heading=found.heading;points=vehicleCorners({...center,heading},{width:2.8,length:5.8});
  }
- return {...data,points,center,entry,heading,width:distance(points[0],points[1]),length:distance(entry,rear),target:true};
+ const goalEntry={x:center.x-Math.sin(heading)*2.9,y:center.y+Math.cos(heading)*2.9};
+ return {...data,type:'bay',points,lotPoints,center,entry:data.type==='area'?goalEntry:entry,heading,
+  width:data.type==='area'?2.8:distance(points[0],points[1]),length:data.type==='area'?5.8:distance(entry,rear),target:true};
 }
 export function nearestRouteDistance(point,route){let best=Infinity,along=0,travelled=0;for(let i=1;i<route.length;i++){const hit=nearestOnSegment(point,route[i-1],route[i]),len=distance(route[i-1],route[i]);if(hit.distance<best){best=hit.distance;travelled=along+len*hit.t;}along+=len;}return {distance:best,travelled,total:along};}
 // The barrier never opens on a timer alone: ETC needs a low-speed approach,

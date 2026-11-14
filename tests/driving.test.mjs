@@ -34,15 +34,17 @@ test("digitized parking goal lies in the mapped shared Hanasaki parking lot", as
     assert.ok(bay.length > car.length + 0.3);
   }
 });
-test("parking requires the whole vehicle, alignment, a full stop and a held parking brake", () => {
+test("parking completes after the whole vehicle stops in the target, without a hidden parking-brake step", () => {
   const car = VEHICLES[1],
     good = { ...bay.center, heading: bay.heading, speed: 0, parkingBrake: true };
   assert.equal(parkingStatus(good, car, bay, 2).complete, true);
-  assert.equal(parkingStatus({ ...good, parkingBrake: false }, car, bay, 3).complete, false);
+  assert.equal(parkingStatus({ ...good, parkingBrake: false }, car, bay, 1).complete, true);
   assert.equal(parkingStatus({ ...good, speed: 1 }, car, bay, 3).complete, false);
-  assert.equal(parkingStatus(good, car, bay, 1.9).complete, false);
+  assert.equal(parkingStatus(good, car, bay, .9).complete, false);
+  assert.equal(parkingStatus({ ...good, heading:good.heading+Math.PI, parkingBrake:false }, car, bay, 1).complete, true);
   assert.equal(parkingStatus({ ...good, x: good.x + bay.width * 0.7 }, car, bay, 3).complete, false);
-  assert.equal(parkingStatus({ ...good, heading: good.heading + 0.3 }, car, bay, 3).complete, false);
+  assert.equal(parkingStatus({ ...good, heading: good.heading + 0.3 }, car, bay, 3).complete, true, 'no hidden angle requirement when the entire car fits');
+  assert.equal(parkingStatus({ ...good, heading: good.heading + Math.PI/2 }, car, bay, 3).complete, false);
 });
 test("both cars can be driven from the approach into the actual parking goal, stopped and secured", () => {
   for (const car of VEHICLES) {
@@ -217,6 +219,10 @@ test("traffic never drives into the player's car and waits behind it", () => {
   for (let i = 0; i < 600; i++) sim.tick(1 / 60, i / 60, player);
   assert.equal(rectanglesOverlap(car, car, player, player), false);
   assert.ok(car.speed < 0.1, "the AI car is waiting");
+  assert.ok(car.braking, "stop lamps stay on while held behind a stopped car");
+  for(let i=0;i<30;i++)sim.tick(1/60,10+i/60,{x:999,y:999});
+  assert.ok(car.speed>.2);
+  assert.equal(car.braking,false,"stop lamps release when the queue departs");
 });
 
 test("traffic turns at junctions instead of always going straight, and U-turns at dead ends", () => {

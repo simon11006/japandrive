@@ -40,7 +40,8 @@ export function buildGraph(ways) {
   const index = new Map(),
     nodes = [],
     edges = [],
-    names = [];
+    names = [],
+    wayTags = [];
   const node = (p) => {
     const key = p.lat.toFixed(7) + "," + p.lon.toFixed(7);
     let id = index.get(key);
@@ -62,6 +63,7 @@ export function buildGraph(ways) {
       reverse = t.oneway === "-1",
       way = names.length;
     names.push(t.name || t.ref || "");
+    wayTags.push(t);
     for (let i = 1; i < geometry.length; i++) {
       const a = node(geometry[i - 1]),
         b = node(geometry[i]),
@@ -81,7 +83,7 @@ export function buildGraph(ways) {
     if (!grid.has(k)) grid.set(k, []);
     grid.get(k).push(i);
   });
-  return { nodes, edges, names, grid, cell };
+  return { nodes, edges, names, wayTags, grid, cell };
 }
 
 export function snap(graph, lat, lon, limit = 250) {

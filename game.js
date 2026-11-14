@@ -1,5 +1,5 @@
 import { startTranslation, t, LANG, setLanguage } from "./i18n.mjs";
-import {approachFor} from './junctions.mjs';
+import {approachFor,roadJunctions} from './junctions.mjs';
 import {
   REGIONS,
   projection,
@@ -11,7 +11,9 @@ import {
   routeProgress,
   pointInRing,
 } from "./map-data.mjs";
-import { VEHICLES, integrateVehicle, steeringLimit } from "./vehicles.mjs";
+import { VEHICLES, integrateVehicle, steeringLimit, selectGear } from "./vehicles.mjs";
+import { DrivingInput, bindDriveAction } from './drive-input.mjs';
+import { NAV_ANCHOR, nextNavigationStep } from './navigation.mjs';
 import { sceneFeatures, drawSceneMap } from "./scene-features.mjs";
 import { DriveRenderer } from "./drive-renderer.mjs";
 import { drawNavMap, drawCarMarker } from "./nav-display.mjs";
@@ -25,6 +27,7 @@ import {
   playerAtFault,
   BLINKER_LEAD_METRES,
   VIOLATIONS,
+  leftTrafficStatus,
 } from "./driving-rules.mjs";
 import { DriveAudio } from "./audio.mjs";
 import { COURSE_STEPS, canVisitStep, courseTime, stars, courseRoadStore, courseParking, drawCourseMap, TollSession } from './courses.mjs';
@@ -181,7 +184,9 @@ try {
   $("#engine-error").textContent =
     "입체 화면을 열지 못했습니다. 브라우저의 그래픽 가속을 켜고 다시 시도해 주세요.";
 }
-const keys = new Set();
+const keys = new DrivingInput();
+let shiftHoldUntil = 0;
+let laneAdvice='',ruleRoads=null,ruleJunctions=[];
 // Pedal positions ramp like a foot pressing a pedal: a tap is gentle, a held
 // key reaches full travel. Blinker: -1 left, 0 off, 1 right.
 let gasLevel = 0,
@@ -829,9 +834,10 @@ function prepareCourseWorld(){
   tollSession=new TollSession(bundle.tolls.map(g=>({...g,...proj.toLocal(g.geo),mode})),mode);
   const graded=courseElevation(elevation,store.roads,tollSession.gates,parkingGoal);
   driver?.setup({base:pos,roads:store.roads,features,coast,elevation:graded,signals,bays,car,projection:proj,
-    course:{theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
+    course:{theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
   driver?.setRoadRules(roadRules,store.roads);
   traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
+  traffic.pedestrianStop=vehicle=>driver?.encounters?.stopDistance(vehicle)??Infinity;
 }
 async function startCourse(){
   if(!courseBundle||busy)return;
@@ -1371,6 +1377,8 @@ function resetPosition() {
   $('#toll-prompt').hidden=true;
   pos = { ...route[0] };
   speed = 0;
+  shiftHoldUntil = 0;
+  laneAdvice='';
   gear = 1;
   steer = 0;
   refreshNearFeatures();
@@ -1454,19 +1462,19 @@ for (const button of document.querySelectorAll("[data-key]")) {
     e.preventDefault();
     if(!active||paused||done)return;
     button.setPointerCapture(e.pointerId);
-    keys.add(button.dataset.key);
+    keys.press(e.pointerId, button.dataset.key);
     button.classList.add("held");
   });
-  const release = () => {
-    keys.delete(button.dataset.key);
-    button.classList.remove("held");
+  const release = (e) => {
+    keys.release(e.pointerId);
+    button.classList.toggle("held", keys.has(button.dataset.key));
   };
   button.addEventListener("pointerup", release);
   button.addEventListener("pointercancel", release);
   button.addEventListener("lostpointercapture", release);
 }
 for (const button of document.querySelectorAll("[data-action]"))
-  button.onclick = () => {
+  bindDriveAction(button, () => {
     if (!active||paused||done) return;
     const action = button.dataset.action;
     if (action === "gear") changeGear(gear > 0 ? -1 : 1);
@@ -1479,24 +1487,38 @@ for (const button of document.querySelectorAll("[data-action]"))
       clearDriveInput();
       $("#pause-menu").hidden = false;
     }
-  };
+  });
+let controlFeedbackTimer;
+function controlFeedback(message) {
+  coach(message);
+  const output=$('#control-feedback');output.textContent=message;output.hidden=false;
+  clearTimeout(controlFeedbackTimer);controlFeedbackTimer=setTimeout(()=>output.hidden=true,3200);
+}
 function changeGear(next) {
-  if (!active || done) return;
-  if (speed >= 0.2) {
-    coach("먼저 S 또는 제동 버튼으로 완전히 정차한 뒤 기어를 바꿔 주세요.");
+  if (!active || paused || done) return;
+  const change = selectGear({ speed, gear, parkingBrake }, next,
+    keys.has('KeyS') || keys.has('ArrowDown') || keys.has('Space'));
+  if (!change.ok) {
+    controlFeedback(change.reason === 'moving'
+      ? "먼저 제동 버튼으로 완전히 정차한 뒤 기어를 바꿔 주세요."
+      : "제동 버튼을 누른 채 다른 손가락으로 D 또는 R을 누르세요.");
     return;
   }
-  gear = next;
+  gear = change.state.gear;
+  speed = 0;
+  gasLevel = 0;
+  brakeLevel = Math.max(brakeLevel, 0.5);
+  shiftHoldUntil = simulationTime + 0.45;
   rear = false;
-  coach(
+  controlFeedback(
     gear < 0
       ? "R 후진 · W / ↑ 또는 가속 버튼으로 천천히 후진하세요."
       : "D 전진 · W / ↑ 또는 가속 버튼으로 출발하세요.",
   );
 }
-$("#gear-forward").onclick = () => changeGear(1);
-$("#gear-reverse").onclick = () => changeGear(-1);
-$("#nav-closer").onclick = () => (navZoom = !navZoom);
+bindDriveAction($("#gear-forward"), () => changeGear(1));
+bindDriveAction($("#gear-reverse"), () => changeGear(-1));
+bindDriveAction($("#nav-closer"), () => { if(active&&!paused&&!done)navZoom=!navZoom; });
 
 function drawMap(context, width, height, scale) {
   // Heading-up map with the car two thirds of the way down.
@@ -1505,7 +1527,7 @@ function drawMap(context, width, height, scale) {
       dy = p.y - pos.y;
     return {
       x: width / 2 + (dx * Math.cos(heading) + dy * Math.sin(heading)) * scale,
-      y: height * 0.66 + (-dx * Math.sin(heading) + dy * Math.cos(heading)) * scale,
+      y: height * NAV_ANCHOR + (-dx * Math.sin(heading) + dy * Math.cos(heading)) * scale,
     };
   };
   drawNavMap(context, width, height, scale, {
@@ -1513,9 +1535,13 @@ function drawMap(context, width, height, scale) {
     features: visibleFeatures,
     route,
     goal: parkingGoal?.center,
+    parkingPoints: parkingGoal?.points,
+    currentPosition:pos,
+    routeIndex:navInfo.routeIndex,
+    turnPoint:navInfo.toTurn<180?navInfo.turnPoint:null,
     convert: cv,
   });
-  drawCarMarker(context, width / 2, height * 0.66, Math.max(9, Math.min(20, width / 34)));
+  drawCarMarker(context, width / 2, height * NAV_ANCHOR, Math.max(14, Math.min(25, width / 28)));
 }
 
 let buildingBusy = false;
@@ -1572,15 +1598,7 @@ function hud() {
   $("#gear").textContent = gear > 0 ? "D" : "R";
   $("#remaining").textContent = distanceText(progress.remaining);
   $("#distance").textContent = `경로상 남은 거리 ${distanceText(progress.remaining)}`;
-  let next = steps.at(-1),
-    toTurn = progress.remaining;
-  for (const s of steps) {
-    if (s.atDistance > progress.travelled + 8) {
-      next = s;
-      toTurn = s.atDistance - progress.travelled;
-      break;
-    }
-  }
+  const {next,toTurn,then}=nextNavigationStep(steps,progress.travelled,progress.remaining);
   const direction =
     {
       left: "좌회전",
@@ -1595,6 +1613,7 @@ function hud() {
   $("#instruction").textContent =
     `${distanceText(toTurn)} 후 ${direction}${next?.name ? " · " + next.name : ""}`;
   const toPark = parkingGoal ? distance(pos, parkingGoal.center) : Infinity;
+  const parkingNearby=toPark<65&&progress.remaining<120;
   const status = parkingStatus({ ...pos, heading, speed, parkingBrake }, car, parkingGoal, parkedSeconds);
   const directionVector = forward(heading);
   const aheadSignals = signals
@@ -1607,19 +1626,24 @@ function hud() {
     .sort((a, b) => a.ahead - b.ahead);
   const nearbySignal = aheadSignals[0],
     signalColor = nearbySignal ? signalPhase(nearbySignal.signal, heading, simulationTime) : "none";
-  if (toPark < 65)
+  if (parkingNearby)
     $("#instruction").textContent =
-      parkingGoal.type === "bay"
-        ? "주차장 안의 초록색 주차면에 주차하세요"
-        : "주차장 안의 빈 공간에 안전하게 정차하세요";
+      status.inside ? "제동을 눌러 완전히 멈추면 주차 완료" : "초록색 P 주차면 안에 차 전체를 넣으세요";
   const korean = (t = "") => t.replace(/県道(\d+)号線/g, "현도 $1호선").replace(/国道(\d+)号線/g, "국도 $1호선");
   const remainingSeconds =
     routeInfo?.duration && routeInfo?.distance ? (routeInfo.duration * progress.remaining) / routeInfo.distance : null;
   const arrival = remainingSeconds != null ? new Date(Date.now() + remainingSeconds * 1000) : null;
   navInfo = {
     instruction: korean($("#instruction").textContent),
-    maneuver: toPark < 65 ? { type: "arrive" } : next?.maneuver,
+    maneuver: parkingNearby ? { type: "arrive" } : next?.maneuver,
+    turnPoint:next?.point,
+    routeIndex:progress.index,
+    then:then?.maneuver.type==='turn'&&then.atDistance-next.atDistance<80?{maneuver:then.maneuver,distance:then.atDistance-next.atDistance}:null,
     action: direction,
+    lesson: laneAdvice || (gear>0&&driver?.encounters?.approaching({...pos,heading,length:car.length})?'횡단보도 · 보행자가 건넌 뒤 출발':'') || (toTurn<65&&next?.maneuver.modifier?.includes('right')
+      ? (nearbySignal&&signalRightArrow(nearbySignal.signal,heading,simulationTime)?'우회전 화살표 · 진행 방향 확인':'우회전 · 대향차 확인 후 왼쪽 차로')
+      : toTurn<65&&next?.maneuver.modifier?.includes('left')?'좌회전 · 왼쪽 가장자리를 따라 천천히':''),
+    alert:!!laneAdvice,
     street: korean(next?.name || ""),
     toTurn,
     minutes: remainingSeconds != null ? Math.max(1, Math.round(remainingSeconds / 60)) : null,
@@ -1628,10 +1652,10 @@ function hud() {
       : null,
     limit: currentLimit.value,
     speed: Math.round(speed * 3.6),
-    parking: toPark < 65,
+    parking: parkingNearby,
     remainingMeters: progress.remaining,
     destination: selected?.name || "주차 연습",
-    remaining: toPark < 65 ? `${Math.round(toPark)} m · 주차` : distanceText(progress.remaining),
+    remaining: parkingNearby ? `${Math.round(toPark)} m · 주차` : distanceText(progress.remaining),
     distanceToTurn: toTurn,
     parkingDistance: toPark,
   };
@@ -1647,13 +1671,11 @@ function hud() {
         ? (touchUI?"양쪽 버튼으로 조향·가속·제동하세요. 회전 전에는 깜빡이를 켜세요.":"W 가속 · S 제동 · A/D 조향 · Z/X 방향지시등 · Q/E 미러 확인")
         : feedbackUntil > simulationTime
           ? feedback
-          : toPark < 65
+          : parkingNearby
             ? status.ready
-              ? "주차 브레이크 작동 · 잠시 정차를 유지하세요"
+              ? "주차면 안입니다 · 1초 동안 정차를 유지하세요"
               : status.inside
-                ? status.aligned
-                  ? (touchUI?"정차한 뒤 ‘주차’ 버튼으로 주차 브레이크를 걸어 주세요.":"정차한 뒤 B로 주차 브레이크를 걸어 주세요.")
-                  : "차체를 주차선과 나란히 맞춰 주세요."
+                ? "제동을 눌러 완전히 멈추면 주차가 완료됩니다."
                 : "차량 전체가 주차 구역 안에 들어가야 합니다."
             : parkingBrake
               ? (touchUI?"‘주차’ 버튼으로 주차 브레이크를 해제하세요.":"주차 브레이크가 걸려 있습니다 · B로 해제")
@@ -1707,7 +1729,9 @@ function hud() {
   const parkButton=$('[data-action="brake"]');parkButton.textContent=parkingBrake?'주차 해제':'주차 잠금';parkButton.setAttribute('aria-pressed',String(parkingBrake));parkButton.classList.toggle('selected',parkingBrake);
   for(const [action,side]of [['blink-left',-1],['blink-right',1]])$(`[data-action="${action}"]`).setAttribute('aria-pressed',String(blinker===side));
   if (nearbySignal && nearbySignal.ahead < 45 && signalColor === "red" && !done && !paused)
-    $("#hint").textContent = "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
+    $("#hint").textContent = signalRightArrow(nearbySignal.signal,heading,simulationTime)
+      ? "녹색 우회전 화살표입니다. 우회전 차량만 진행 방향을 확인하세요."
+      : "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
 }
 
 function coach(message, penalty = 0) {
@@ -1738,22 +1762,11 @@ function monitorRules(dt) {
     scoreCard.sustained("speeding", speeding, dt, simulationTime),
     `제한속도 ${currentLimit.value}km/h 초과 · 속도를 줄여 주세요.`,
   );
-  const tags = lane.road.tags,
-    oneway = ["yes", "1", "true", "-1"].includes(tags.oneway),
-    cos = Math.cos(heading - lane.heading),
-    travelHeading = cos >= 0 ? lane.heading : lane.heading + Math.PI;
-  const side =
-    (pos.x - lane.point.x) * Math.cos(travelHeading) + (pos.y - lane.point.y) * Math.sin(travelHeading);
-  const wrong =
-    !inLot &&
-    gear > 0 &&
-    speed > 2 &&
-    lane.distance < roadWidth(tags) / 2 &&
-    (oneway
-      ? tags.oneway === "-1"
-        ? cos > 0.6
-        : cos < -0.6
-      : side > 0.95 && Math.abs(cos) > 0.8 && tags.highway !== "service");
+  if(ruleRoads!==store.roads){ruleRoads=store.roads;ruleJunctions=roadJunctions(store.roads).map(j=>({...j,radius:Math.max(...j.arms.map(a=>a.width/2))+car.length/2+1}));}
+  const inJunction=ruleJunctions.some(j=>distance(pos,j)<j.radius);
+  const laneState=leftTrafficStatus({...pos,heading,gear},lane,{inLot,inJunction});
+  const wrong=laneState.wrong&&speed>.5;
+  laneAdvice=wrong?'왼쪽 차로와 진행 방향을 확인하세요':'';
   warnViolation(
     scoreCard.sustained("wrongWay", wrong, dt, simulationTime),
     "진행 방향과 왼쪽 차선을 확인하세요.",
@@ -1823,6 +1836,8 @@ function nearestRoad(point) {
 function completeParking() {
   done = true;
   speed = 0;
+  parkingBrake = true;
+  clearDriveInput();
   $("#result").hidden = false;
   $("#result").replaceChildren();
   const small = document.createElement("small");
@@ -1848,7 +1863,7 @@ function completeParking() {
   }
   const note = document.createElement("p");
   note.className = "fine";
-  note.textContent = "주차 정렬 · 완전 정차 · 주차 브레이크 완료. 점수는 게임의 연습 평가입니다.";
+  note.textContent = "목표 주차면 진입 · 완전 정차 완료. 점수는 게임의 연습 평가입니다.";
   const b = document.createElement("button");
   b.className = "primary";
   b.textContent = "다음 드라이브";
@@ -2363,9 +2378,9 @@ function frameBody(t) {
       const state = integrateVehicle(
         { x: pos.x, y: pos.y, speed, heading, steer, gear },
         {
-          gas: parkingBrake ? 0 : gasLevel,
-          brake: parkingBrake ? 1 : brakeLevel,
-          creep: !parkingBrake,
+          gas: parkingBrake || simulationTime < shiftHoldUntil ? 0 : gasLevel,
+          brake: parkingBrake || simulationTime < shiftHoldUntil ? 1 : brakeLevel,
+          creep: !parkingBrake && simulationTime >= shiftHoldUntil,
           steer:
             (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
             (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0),
@@ -2420,6 +2435,20 @@ function frameBody(t) {
           coach("도로 가장자리입니다. 천천히 차도로 돌아오세요.");
         }
       }
+      const player={...pos,speed,heading,length:car.length,width:car.width};
+      const encounter=driver?.encounters;
+      encounter?.tick(dt,simulationTime,player,traffic?.cars||[]);
+      const crossing=gear>0?encounter?.approaching(player):null;
+      if(crossing){
+        coach('횡단보도 보행자 우선 · 건너는 사람이 모두 지나갈 때까지 기다리세요.');
+        const front=crossing.ahead-car.length/2;
+        warnViolation(scoreCard.sustained('pedestrian',front<1.5&&speed>.4,dt,simulationTime,.15),'횡단보도에서 보행자에게 양보하세요.');
+      }else scoreCard.sustained('pedestrian',false,dt,simulationTime);
+      if(encounter?.blocks(player)){
+        const wasMoving=speed>.3;
+        pos={x:previous.x,y:previous.y};speed=0;
+        if(wasMoving)warnViolation(scoreCard.add('pedestrian',simulationTime),'보행자와 너무 가깝습니다. 완전히 정지해 보행자가 지나가게 하세요.');
+      }
       traffic?.tick(dt, simulationTime, { ...pos, speed, heading, length: car.length, width: car.width });
       // Bodies never pass through each other. Only contact the player drove
       // into is scored; being touched while stopped is not.
@@ -2450,7 +2479,7 @@ function frameBody(t) {
         const phase=signalPhase(s,heading,simulationTime);
         if(phase==='flash-red'&&b>0&&b<12&&speed<.1)stopHistory.set('flash-'+s.id,true);
         const upcoming=steps.find(step=>step.atDistance>routeProgress(route,pos,routeInfo.distance).travelled-6&&step.maneuver.type==='turn');
-        const arrowAllowed=blinker===1&&signalRightArrow(s,heading,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
+        const arrowAllowed=signalRightArrow(s,heading,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
         if (
           a > 0 &&
           b <= 0 &&
