@@ -12,7 +12,7 @@ import {
   pointInRing,
 } from "./map-data.mjs";
 import { VEHICLES, integrateVehicle, steeringLimit, selectGear } from "./vehicles.mjs";
-import { DrivingInput, bindDriveAction } from './drive-input.mjs';
+import { DrivingInput, bindDriveAction, readDrivingControls } from './drive-input.mjs';
 import { NAV_ANCHOR, nextNavigationStep } from './navigation.mjs';
 import {sampleRoute} from './road-markings.mjs';
 import {renderDriveResult} from './score-ui.mjs';
@@ -950,7 +950,7 @@ function updateWizard() {
   $("#step-selection").textContent = labels[wizardStep - 1] || "선택해 주세요";
   $("#step-back").textContent = wizardStep === 1 ? "← 타이틀" : "← 이전";
   $("#step-next").hidden = wizardStep === 4;
-  $("#step-next").textContent = `${wizardLabels[wizardStep] || "출발"} →`;
+  $('#step-next-label').textContent = `${wizardLabels[wizardStep] || "출발"} →`;
   $("#step-next").disabled =
     !regionReady || busy || !selectedCourse || !courseBundle;
   $('#garage-name').textContent=car.english;
@@ -1461,7 +1461,7 @@ window.addEventListener("keydown", (e) => {
     $("#pause-menu").hidden = !paused;
   }
   if (e.code === "KeyM") navZoom = !navZoom;
-  if (e.code === "KeyB" && speed < 0.2) parkingBrake = !parkingBrake;
+  if (e.code === "KeyB") toggleParking();
   if (e.code === "KeyZ") setBlinker(-1);
   if (e.code === "KeyX") setBlinker(1);
 });
@@ -1505,7 +1505,7 @@ for (const button of document.querySelectorAll("[data-action]"))
     if (!active||paused||done) return;
     const action = button.dataset.action;
     if (action === "gear") changeGear(gear > 0 ? -1 : 1);
-    if (action === "brake") {if(speed < 0.2)parkingBrake = !parkingBrake;else coach("완전히 멈춘 뒤 주차 브레이크를 사용하세요.");}
+    if (action === "brake") toggleParking();
     if (action === "nav") navZoom = !navZoom;
     if (action === "blink-left") setBlinker(-1);
     if (action === "blink-right") setBlinker(1);
@@ -1523,15 +1523,18 @@ function controlFeedback(message) {
 }
 function changeGear(next) {
   if (!active || paused || done) return;
+  const brakeHeld = readDrivingControls(keys).brake;
+  if (parkingBrake && !brakeHeld) {controlFeedback('↓ 또는 제동 버튼을 누른 채 전·후진을 전환하세요.');return;}
   const change = selectGear({ speed, gear, parkingBrake }, next,
-    keys.has('KeyS') || keys.has('ArrowDown') || keys.has('Space'));
+    brakeHeld);
   if (!change.ok) {
     controlFeedback(change.reason === 'moving'
       ? "먼저 제동 버튼으로 완전히 정차한 뒤 기어를 바꿔 주세요."
-      : "제동 버튼을 누른 채 다른 손가락으로 D 또는 R을 누르세요.");
+      : "↓ 또는 제동 버튼을 누른 채 전·후진을 전환하세요.");
     return;
   }
   gear = change.state.gear;
+  parkingBrake = false;
   speed = 0;
   gasLevel = 0;
   brakeLevel = Math.max(brakeLevel, 0.5);
@@ -1543,8 +1546,16 @@ function changeGear(next) {
       : "D 전진 · W / ↑ 또는 가속 버튼으로 출발하세요.",
   );
 }
-bindDriveAction($("#gear-forward"), () => changeGear(1));
-bindDriveAction($("#gear-reverse"), () => changeGear(-1));
+function toggleParking() {
+  if (!active || paused || done) return;
+  if (Math.abs(speed) >= .2) {controlFeedback('완전히 멈춘 뒤 파킹을 사용하세요.');return;}
+  if (parkingBrake && !readDrivingControls(keys).brake) {controlFeedback('↓ 또는 제동 버튼을 누른 채 파킹을 해제하세요.');return;}
+  parkingBrake = !parkingBrake; speed=0; gasLevel=0;
+  shiftHoldUntil=simulationTime+.45;
+  controlFeedback(parkingBrake?'파킹 · 주차 브레이크가 걸렸습니다.':'파킹 해제 · 브레이크를 천천히 놓으세요.');
+}
+bindDriveAction($("#gear-toggle"), () => changeGear(-gear));
+bindDriveAction($("#parking-toggle"), toggleParking);
 bindDriveAction($("#nav-closer"), () => { if(active&&!paused&&!done)navZoom=!navZoom; });
 
 function drawMap(context, width, height, scale) {
@@ -1693,9 +1704,9 @@ function hud() {
     : paused
       ? (touchUI?"일시정지 · 계속 운전을 눌러 돌아가세요":"일시정지 · Esc로 계속")
       : parkingBrake && toPark >= 65
-        ? (touchUI?"제동을 누른 채 ‘주차’ 버튼을 눌러 출발하세요.":"주차 브레이크가 걸려 있습니다 · S로 브레이크를 밟은 채 B로 해제하세요")
+        ? (touchUI?"제동을 누른 채 ‘파킹’ 버튼을 눌러 출발하세요.":"주차 브레이크가 걸려 있습니다 · ↓로 브레이크를 밟은 채 B로 해제하세요")
         : simulationTime < 7
-        ? (touchUI?"양쪽 버튼으로 조향·가속·제동하세요. 회전 전에는 깜빡이를 켜세요.":"W 가속 · S 제동 · A/D 조향 · Z/X 방향지시등 · Q/E 미러 확인")
+        ? (touchUI?"양쪽 버튼으로 조향·가속·제동하세요. 회전 전에는 깜빡이를 켜세요.":"↑ 가속 · ↓ 브레이크 · ←/→ 조향 (WASD 가능) · Z/X 방향지시등 · Q/E 미러 확인")
         : feedbackUntil > simulationTime
           ? feedback
           : parkingNearby
@@ -1743,17 +1754,17 @@ function hud() {
     violations: scoreCard.events.length,
   });
   for (const [id, on] of [
-    ["#gear-forward", gear > 0],
-    ["#gear-reverse", gear < 0],
+    ["#gear-toggle", gear < 0 && !parkingBrake],
+    ["#parking-toggle", parkingBrake],
   ]) {
     $(id).classList.toggle("selected", on);
     $(id).setAttribute("aria-pressed", String(on));
   }
   $("#gear-state").textContent = parkingBrake
-    ? "주차 브레이크 작동"
+    ? "P 파킹 · ↓ + R로 전·후진 전환"
     : gear < 0
-      ? (touchUI?"R 후진 · 후방카메라 확인":"R 후진 · W 가속 / S 제동")
-      : (touchUI?"D 전진 · 페달로 속도 조절":"D 전진 · W 가속 / S 제동");
+      ? (touchUI?"R 후진 · 후방카메라 확인":"현재 후진 · ↑ 가속 / ↓ 브레이크")
+      : (touchUI?"D 전진 · 페달로 속도 조절":"현재 전진 · ↑ 가속 / ↓ 브레이크");
   const parkButton=$('[data-action="brake"]');parkButton.textContent=parkingBrake?'주차 해제':'주차 잠금';parkButton.setAttribute('aria-pressed',String(parkingBrake));parkButton.classList.toggle('selected',parkingBrake);
   for(const [action,side]of [['blink-left',-1],['blink-right',1]])$(`[data-action="${action}"]`).setAttribute('aria-pressed',String(blinker===side));
   if (nearbySignal && nearbySignal.ahead < 45 && signalColor === "red" && !done && !paused)
@@ -2395,8 +2406,7 @@ function frameBody(t) {
   if (active) {
     if (!paused && !done && (store.hasCoverage(pos, 80) || trainingMode === "parking")) {
       simulationTime += dt;
-      const gas = keys.has("KeyW") || keys.has("ArrowUp"),
-        brake = keys.has("KeyS") || keys.has("ArrowDown") || keys.has("Space");
+      const {gas, brake, steer: steeringInput} = readDrivingControls(keys);
       gasLevel = gas ? Math.min(1, Math.max(gasLevel, 0.2) + dt * 1.4) : Math.max(0, gasLevel - dt * 4);
       brakeLevel = brake ? Math.min(1, Math.max(brakeLevel, 0.3) + dt * 1.2) : Math.max(0, brakeLevel - dt * 5);
       if (gas && parkingBrake && feedbackUntil < simulationTime)
@@ -2408,9 +2418,7 @@ function frameBody(t) {
           gas: parkingBrake || simulationTime < shiftHoldUntil ? 0 : gasLevel,
           brake: parkingBrake || simulationTime < shiftHoldUntil ? 1 : brakeLevel,
           creep: !parkingBrake && simulationTime >= shiftHoldUntil,
-          steer:
-            (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
-            (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0),
+          steer: steeringInput,
         },
         car,
         dt,

@@ -250,9 +250,9 @@ body.driving[data-drive-layout="landscape"] .touch-tools :is([data-action="nav"]
 body.driving[data-drive-layout="landscape"] .touch-tools [data-action="brake"] {
  bottom:var(--control-row);right:calc(var(--control-edge) + var(--safe-right));width:calc(var(--drive-pad)*2 + var(--control-gap));
 }
-body.driving[data-drive-layout="landscape"] #drive-toolbar :is(#gear-forward,#gear-reverse) {bottom:calc(var(--control-row) + 48px);}
-body.driving[data-drive-layout="landscape"] #gear-forward {right:calc(var(--control-edge) + var(--safe-right) + var(--drive-pad) + var(--control-gap));}
-body.driving[data-drive-layout="landscape"] #gear-reverse {right:calc(var(--control-edge) + var(--safe-right));}
+body.driving[data-drive-layout="landscape"] #drive-toolbar :is(#gear-toggle,#parking-toggle) {bottom:var(--control-row);}
+body.driving[data-drive-layout="landscape"] #gear-toggle {right:calc(var(--control-edge) + var(--safe-right) + var(--drive-pad) + var(--control-gap));}
+body.driving[data-drive-layout="landscape"] #parking-toggle {right:calc(var(--control-edge) + var(--safe-right));}
 body.driving :is(#touch-controls,#drive-toolbar) button {touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
 body.driving[data-drive-layout="landscape"] #drive-toolbar button[aria-pressed="true"] {background:#355f4d;color:#efffe9;border-color:#b9ebba;}
 @media(max-width:700px) and (orientation:landscape){
@@ -261,7 +261,7 @@ body.driving[data-drive-layout="landscape"] #drive-toolbar button[aria-pressed="
  body.driving[data-drive-layout="landscape"] .touch-steer button {height:44px;min-height:44px;}
  body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-left"] {bottom:calc(var(--control-row) + 48px);}
  body.driving[data-drive-layout="landscape"] .touch-tools [data-action="blink-right"] {left:calc(var(--control-edge) + var(--safe-left));}
- body.driving[data-drive-layout="landscape"] .touch-tools [data-action="nav"] {left:auto;right:calc(var(--control-edge) + var(--safe-right));bottom:var(--control-row);}
+ body.driving[data-drive-layout="landscape"] .touch-tools [data-action="nav"] {left:auto;right:calc(var(--control-edge) + var(--safe-right));bottom:calc(var(--control-row) + 48px);}
  body.driving[data-drive-layout="landscape"] .touch-tools [data-action="brake"] {width:var(--drive-pad);right:calc(var(--control-edge) + var(--safe-right) + var(--drive-pad) + var(--control-gap));}
  body.driving[data-drive-layout="landscape"] .touch-tools [data-action="pause"] {left:calc(var(--control-edge) + var(--safe-left));top:calc(8px + var(--safe-top));bottom:auto;}
  body.driving[data-drive-layout="landscape"] #help-open {display:none;}

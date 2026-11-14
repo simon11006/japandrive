@@ -128,9 +128,9 @@ function mesh(parent, name, g, m) {
   parent.add(o);
   return o;
 }
-function roundBox(w, h, d, r = 0.015) {
+function roundBox(w, h, d, r = 0.015, segments = 3) {
   r = Math.min(r, w / 2, h / 2, d / 2);
-  const g = new T.BoxGeometry(w, h, d, 3, 3, 3),
+  const g = new T.BoxGeometry(w, h, d, segments, segments, segments),
     p = g.attributes.position,
     n = g.attributes.normal;
   const core = new T.Vector3(w / 2 - r, h / 2 - r, d / 2 - r),
@@ -160,7 +160,13 @@ function tube(parent, name, points, r, mat, closed = false) {
   const o = mesh(
     parent,
     name,
-    new T.TubeGeometry(curve, Math.max(16, points.length * 3), r, 6, closed),
+    new T.TubeGeometry(
+      curve,
+      Math.max(16, points.length, Math.ceil(curve.getLength() / 0.035)),
+      r,
+      6,
+      closed,
+    ),
     mat,
   );
   // Sub-centimetre trim must not cast offset, jagged shadows over the paint.
@@ -317,11 +323,11 @@ function makeMaterials(id, paint) {
     sideGlass: new T.MeshPhysicalMaterial({
       name: "tinted side glass",
       color: "#16282e",
-      metalness: 0.28,
-      roughness: 0.12,
+      metalness: 0.08,
+      roughness: 0.17,
       clearcoat: 1,
       clearcoatRoughness: 0.06,
-      envMapIntensity: 1,
+      envMapIntensity: 0.65,
       side: T.DoubleSide,
     }),
     privacy: new T.MeshPhysicalMaterial({
@@ -330,7 +336,7 @@ function makeMaterials(id, paint) {
       metalness: 0.25,
       roughness: 0.1,
       clearcoat: 1,
-      envMapIntensity: 1,
+      envMapIntensity: 0.65,
       side: T.DoubleSide,
     }),
     black: new T.MeshStandardMaterial({ color: "#12161b", roughness: 0.8 }),
@@ -419,7 +425,7 @@ function makeWheel(p, m, id, faceSide) {
     const o = mesh(
       g,
       "tread-groove",
-      new T.TorusGeometry(R - 0.001, 0.002, 4, 64),
+      new T.TorusGeometry(R - 0.001, 0.002, 3, 48),
       m.black,
     );
     o.rotation.y = Math.PI / 2;
@@ -496,6 +502,79 @@ function makeWheel(p, m, id, faceSide) {
     );
   }
   return g;
+}
+// Tessellated surface patches keep glass, bezels and fascia on the body curve.
+// Analytic surface normals avoid the faceted reflections of a triangulated pane.
+function mappedPanel(
+  parent,
+  name,
+  outline,
+  material,
+  map,
+  outward,
+  holes = [],
+  depth = 2,
+) {
+  const all = [...outline, ...holes.flat()],
+    positions = [],
+    normals = [];
+  const triangles = T.ShapeUtils.triangulateShape(
+    outline.map((p) => new T.Vector2(...p)),
+    holes.map((h) => h.map((p) => new T.Vector2(...p))),
+  );
+  const emit = (p) => {
+    const a = V(map(...p)),
+      du = V(map(p[0] + 0.0001, p[1])).sub(a),
+      dv = V(map(p[0], p[1] + 0.0001)).sub(a),
+      n = du.cross(dv).normalize();
+    if (n.dot(V(outward)) < 0) n.negate();
+    positions.push(...a.toArray());
+    normals.push(...n.toArray());
+  };
+  const split = (a, b, c, d) => {
+    if (d) {
+      const mid = (p, q) => p.map((v, i) => (v + q[i]) / 2),
+        ab = mid(a, b),
+        bc = mid(b, c),
+        ca = mid(c, a);
+      split(a, ab, ca, d - 1);
+      split(ab, b, bc, d - 1);
+      split(ca, bc, c, d - 1);
+      split(ab, bc, ca, d - 1);
+      return;
+    }
+    const n = V(map(...b))
+      .sub(V(map(...a)))
+      .cross(V(map(...c)).sub(V(map(...a))));
+    for (const p of n.dot(V(outward)) >= 0 ? [a, b, c] : [a, c, b]) emit(p);
+  };
+  for (const [a, b, c] of triangles) split(all[a], all[b], all[c], depth);
+  const g = new T.BufferGeometry();
+  g.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+  g.setAttribute("normal", new T.Float32BufferAttribute(normals, 3));
+  return mesh(parent, name, g, material);
+}
+function roundedOutline(points, radius = 0.035) {
+  const result = [];
+  points.forEach((b, i) => {
+    const a = points[(i + points.length - 1) % points.length],
+      c = points[(i + 1) % points.length],
+      distance = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+    const inT = Math.min(0.22, radius / distance(a, b)),
+      outT = Math.min(0.22, radius / distance(c, b));
+    const start = b.map((v, k) => lerp(v, a[k], inT)),
+      end = b.map((v, k) => lerp(v, c[k], outT));
+    for (let j = 0; j <= 4; j++) {
+      const t = j / 4;
+      result.push(
+        b.map(
+          (v, k) =>
+            (1 - t) ** 2 * start[k] + 2 * t * (1 - t) * v + t * t * end[k],
+        ),
+      );
+    }
+  });
+  return result;
 }
 function addCabin(group, p, m, id, sideX) {
   const roof = surface(
@@ -622,70 +701,73 @@ function addCabin(group, p, m, id, sideX) {
         .reverse()
         .map(([z, , y]) => [z, y - 0.008]),
     ];
-    panel(
+    const windows = p.windows.map((poly) =>
+      roundedOutline(poly, id === "alphard" ? 0.045 : 0.028),
+    );
+    mappedPanel(
       group,
       "painted-cabin-side",
-      perimeter.map((v) => point(v, -0.003)),
+      perimeter,
       m.paint,
+      (z, y) => point([z, y], -0.003),
       [side, 0, 0],
-      p.windows.map((poly) => poly.map((v) => point(v, -0.003))),
+      windows,
+      2,
     );
-    p.windows.forEach((poly, i) => {
-      const points = poly.map((v) => point(v, 0.009));
-      const pane = panel(
+    windows.forEach((poly, i) => {
+      const pane = mappedPanel(
         group,
         `side-window-${side}-${i}`,
-        points,
+        poly,
         i === 0 ? m.sideGlass : m.privacy,
+        (z, y) => point([z, y], 0.004),
         [side, 0, 0],
       );
       pane.castShadow = false;
       pane.receiveShadow = false;
-      tube(group, "window-rubber", points, 0.006, m.piano, true);
+      tube(
+        group,
+        "window-rubber",
+        poly.map((v) => point(v, 0.006)),
+        0.004,
+        m.piano,
+        true,
+      );
     });
+    // The pillars are part of the painted curved shell. Thin seals follow the
+    // glass edge; cylindrical painted bars made the roof look like a roll cage.
     const a = p.windshield;
     tube(
       group,
-      "painted-A-pillar",
-      [
-        [side * a.bottom[2], a.bottom[1], a.bottom[0]],
-        [side * (a.top[2] + 0.015), a.top[1] - 0.015, a.top[0]],
-      ],
-      id === "alphard" ? 0.043 : 0.038,
-      m.paint,
+      "windscreen-edge-seal",
+      Array.from({ length: 18 }, (_, i) => {
+        const t = i / 17;
+        return [
+          side * lerp(a.bottom[2], a.top[2], t),
+          lerp(a.bottom[1], a.top[1], t),
+          lerp(a.bottom[0], a.top[0], t),
+        ];
+      }),
+      0.005,
+      m.black,
     );
     const front = p.windows[0],
       rear = p.windows[1];
-    panel(
+    mappedPanel(
       group,
       "B-pillar",
-      [
-        point(front.at(-1), 0.006),
-        point(front[2], 0.006),
-        point(rear[1], 0.006),
-        point(rear[0], 0.006),
-      ],
+      [front.at(-1), front[2], rear[1], rear[0]],
       m.piano,
+      (z, y) => point([z, y], 0.005),
       [side, 0, 0],
     );
-    panel(
+    mappedPanel(
       group,
       "C-pillar",
-      [
-        point(rear.at(-1), 0.005),
-        point(rear.at(-2), 0.005),
-        point(p.windows[2][1], 0.005),
-        point(p.windows[2][0], 0.005),
-      ],
+      [rear.at(-1), rear.at(-2), p.windows[2][1], p.windows[2][0]],
       m.piano,
+      (z, y) => point([z, y], 0.005),
       [side, 0, 0],
-    );
-    tube(
-      group,
-      "roof-side-rail",
-      p.roof.map(([z, y]) => point([z, y - 0.03])),
-      0.022,
-      m.paint,
     );
     const lower = p.windows
       .flatMap((a) => [a[0], a.at(-1)])
@@ -700,13 +782,17 @@ function addCabin(group, p, m, id, sideX) {
     const d = p.rearWindow;
     tube(
       group,
-      "rear-quarter-pillar",
-      [
-        [side * d.top[2], d.top[1], d.top[0]],
-        [side * d.bottom[2], d.bottom[1], d.bottom[0]],
-      ],
-      id === "alphard" ? 0.052 : 0.043,
-      m.paint,
+      "rear-glass-edge-seal",
+      Array.from({ length: 18 }, (_, i) => {
+        const t = i / 17;
+        return [
+          side * lerp(d.bottom[2], d.top[2], t),
+          lerp(d.bottom[1], d.top[1], t),
+          lerp(d.bottom[0], d.top[0], t),
+        ];
+      }),
+      0.005,
+      m.black,
     );
   }
   box(
@@ -778,318 +864,299 @@ function addCabin(group, p, m, id, sideX) {
     );
   }
 }
-function fittedLamp(group, points, material, project) {
-  const base = panel(
-    group,
-    "prius-angular-headlight",
-    points,
-    material,
-    [0, 0, -1],
-  );
-  const positions = [],
-    indices = base.geometry.index;
-  const subdivide = (a, b, c, depth) => {
-    if (!depth) {
-      positions.push(...project(a), ...project(b), ...project(c));
-      return;
-    }
-    const midpoint = (p, q) => p.map((v, i) => (v + q[i]) / 2);
-    const ab = midpoint(a, b),
-      bc = midpoint(b, c),
-      ca = midpoint(c, a);
-    subdivide(a, ab, ca, depth - 1);
-    subdivide(ab, b, bc, depth - 1);
-    subdivide(ca, bc, c, depth - 1);
-    subdivide(ab, bc, ca, depth - 1);
-  };
-  for (let i = 0; i < indices.count; i += 3)
-    subdivide(
-      points[indices.getX(i)],
-      points[indices.getX(i + 1)],
-      points[indices.getX(i + 2)],
-      3,
-    );
-  base.geometry.dispose();
-  base.geometry = new T.BufferGeometry();
-  base.geometry.setAttribute(
-    "position",
-    new T.Float32BufferAttribute(positions, 3),
-  );
-  base.geometry.computeVertexNormals();
-  return base;
-}
 function fittedLine(points, project, closed = false) {
   const line = closed ? [...points, points[0]] : points,
     result = [];
   for (let i = 1; i < line.length; i++)
-    for (let j = 0; j < 8; j++)
+    for (let j = 0; j < 3; j++)
       result.push(
-        project(line[i - 1].map((n, k) => lerp(n, line[i][k], j / 8))),
+        project(line[i - 1].map((n, k) => lerp(n, line[i][k], j / 3))),
       );
   if (!closed) result.push(project(line.at(-1)));
   return result;
 }
-function addFront(group, p, m, id, front, bonnetHeight) {
-  const zAt = (x) =>
-      front -
-      0.028 +
-      0.08 * (Math.abs(x) / (id === "alphard" ? 0.84 : 0.77)) ** 4,
-    map = (points) => points.map(([x, y]) => [x, y, zAt(x)]);
+function addFront(group, m, id, noseZ) {
+  const zAt = (x, y) => noseZ(x, y),
+    map = (x, y) => [x, y, zAt(x, y)];
+  const patch = (name, outline, mat, offset = 0) =>
+    mappedPanel(
+      group,
+      name,
+      roundedOutline(outline, 0.016),
+      mat,
+      (x, y) => [x, y, zAt(x, y) - offset],
+      [0, 0, -1],
+      [],
+      name.includes("grille-recess") ||
+        name.includes("intake") ||
+        name === "prius-angular-headlight"
+        ? 3
+        : 2,
+    );
+  const line = (name, points, r, mat, closed = false) => {
+    const outline = closed ? roundedOutline(points, 0.016) : points;
+    tube(
+      group,
+      name,
+      fittedLine(
+        outline.map(([x, y]) => [x, y, 0]),
+        ([x, y]) => [x, y, zAt(x, y) - 0.006],
+        closed,
+      ),
+      r,
+      mat,
+      closed,
+    );
+  };
   if (id === "alphard") {
-    const points = map([
-      [-0.68, 1.045],
-      [0.68, 1.045],
+    const grille = [
+      [-0.68, 1.035],
+      [0.68, 1.035],
       [0.75, 0.91],
       [0.59, 0.29],
       [-0.59, 0.29],
       [-0.75, 0.91],
-    ]);
-    panel(group, "alphard-grille-recess", points, m.piano, [0, 0, -1]);
-    tube(group, "grille-chrome-outline", points, 0.012, m.darkChrome, true);
+    ];
+    patch("alphard-grille-recess", grille, m.piano);
+    line("grille-chrome-outline", grille, 0.007, m.darkChrome, true);
     const tiles = new T.InstancedMesh(
-        roundBox(0.123, 0.043, 0.026, 0.008),
+        roundBox(0.123, 0.032, 0.014, 0.006, 2),
         m.chrome,
         54,
       ),
       d = new T.Object3D();
     tiles.name = "alphard-grille-chrome-blocks";
-    tiles.castShadow = true;
+    tiles.castShadow = false;
     for (let row = 0; row < 6; row++)
       for (let col = 0; col < 9; col++) {
         const y = 0.36 + row * 0.112,
-          x = (col - 4) * (0.142 + row * 0.003);
-        d.position.set(x, y, zAt(x) - 0.012);
-        d.rotation.set(0.12, 0, -0.1);
+          x = (col - 4) * (0.142 + row * 0.003),
+          slope = (zAt(x + 0.001, y) - zAt(x - 0.001, y)) / 0.002;
+        d.position.set(x, y, zAt(x, y) - 0.008);
+        d.rotation.set(0.14, -Math.atan(slope), -0.12);
         d.updateMatrix();
         tiles.setMatrixAt(row * 9 + col, d.matrix);
       }
     group.add(tiles);
-    for (let row = 0; row < 7; row++)
-      tube(
-        group,
-        "grille-shadow-slat",
-        [
-          [-0.59 - row * 0.014, 0.31 + row * 0.11, zAt(0.5) + 0.001],
-          [0, 0.31 + row * 0.11, front - 0.02],
-          [0.59 + row * 0.014, 0.31 + row * 0.11, zAt(0.5) + 0.001],
-        ],
-        0.009,
-        m.black,
-      );
     for (const side of [-1, 1]) {
       const lamp = [
-        [side * 0.38, 1.075, front - 0.035],
-        [side * 0.78, 1.09, front - 0.03],
-        [side * 0.91, 1.07, front + 0.19],
-        [side * 0.91, 0.985, front + 0.18],
-        [side * 0.78, 0.965, front - 0.035],
-        [side * 0.43, 0.96, front - 0.035],
-      ];
-      panel(group, "alphard-three-eye-headlight", lamp, m.piano, [0, 0, -1]);
-      tube(group, "headlamp-surround", lamp, 0.009, m.chrome, true);
-      for (let i = 0; i < 3; i++)
-        box(
-          group,
+        [0.4, 1.075],
+        [0.76, 1.1],
+        [0.87, 1.09],
+        [0.86, 1.015],
+        [0.77, 0.994],
+        [0.43, 0.996],
+      ].map(([x, y]) => [side * x, y]);
+      patch("alphard-three-eye-headlight", lamp, m.piano, 0.003);
+      line("headlamp-surround", lamp, 0.004, m.darkChrome, true);
+      for (let i = 0; i < 3; i++) {
+        const x = 0.51 + i * 0.105,
+          y = 1.044 + i * 0.004;
+        patch(
           "LED-projector",
-          [0.072, 0.043, 0.038],
-          [side * (0.55 + i * 0.095), 1.024, front - 0.058],
+          [
+            [x - 0.035, y - 0.019],
+            [x + 0.035, y - 0.019],
+            [x + 0.035, y + 0.019],
+            [x - 0.035, y + 0.019],
+          ].map(([x, y]) => [side * x, y]),
           m.lens,
-          0.015,
+          0.006,
         );
-      tube(
-        group,
+      }
+      line(
         "daytime-running-light",
         [
-          [side * 0.43, 0.975, front - 0.055],
-          [side * 0.78, 0.975, front - 0.055],
-          [side * 0.9, 1.005, front + 0.14],
+          [side * 0.44, 1.004],
+          [side * 0.77, 1.002],
+          [side * 0.855, 1.029],
         ],
-        0.009,
+        0.005,
         m.led,
       );
       const fog = [
-        [side * 0.75, 0.73, zAt(0.75)],
-        [side * 0.83, 0.65, zAt(0.83)],
-        [side * 0.8, 0.28, zAt(0.8)],
-        [side * 0.72, 0.34, zAt(0.72)],
-      ];
-      panel(group, "vertical-fog-recess", fog, m.piano, [0, 0, -1]);
-      tube(
-        group,
-        "fog-chrome-blade",
-        [fog[0], fog[1], fog[2]],
-        0.012,
-        m.chrome,
-      );
-      box(
-        group,
+        [0.76, 0.72],
+        [0.84, 0.64],
+        [0.8, 0.3],
+        [0.73, 0.35],
+      ].map(([x, y]) => [side * x, y]);
+      patch("vertical-fog-recess", fog, m.piano);
+      line("fog-chrome-blade", fog.slice(0, 3), 0.007, m.chrome);
+      patch(
         "fog-projector",
-        [0.048, 0.034, 0.025],
-        [side * 0.78, 0.52, zAt(0.78) - 0.017],
-        m.led,
-        0.012,
+        [
+          [0.755, 0.51],
+          [0.793, 0.51],
+          [0.793, 0.535],
+          [0.755, 0.535],
+        ].map(([x, y]) => [side * x, y]),
+        m.lens,
+        0.006,
       );
     }
-    emblem(group, 0, 0.99, front - 0.047, m);
+    emblem(group, 0, 0.985, zAt(0, 0.985) - 0.015, m);
   } else {
-    panel(
-      group,
+    patch(
       "prius-upper-intake",
-      map([
-        [-0.66, 0.645],
-        [0.66, 0.645],
-        [0.54, 0.57],
-        [-0.54, 0.57],
-      ]),
+      [
+        [-0.61, 0.645],
+        [0.61, 0.645],
+        [0.54, 0.59],
+        [-0.54, 0.59],
+      ],
       m.piano,
-      [0, 0, -1],
     );
-    panel(
-      group,
+    patch(
       "prius-lower-intake",
-      map([
-        [-0.58, 0.42],
-        [0.58, 0.42],
-        [0.72, 0.25],
-        [-0.72, 0.25],
-      ]),
+      [
+        [-0.55, 0.42],
+        [0.55, 0.42],
+        [0.65, 0.27],
+        [-0.65, 0.27],
+      ],
       m.black,
-      [0, 0, -1],
     );
     for (let i = 0; i < 5; i++)
-      tube(
-        group,
+      line(
         "intake-horizontal-slat",
         [
-          [-0.6, 0.27 + i * 0.027, front + 0.004],
-          [0, 0.27 + i * 0.027, front - 0.02],
-          [0.6, 0.27 + i * 0.027, front + 0.004],
+          [-0.57, 0.285 + i * 0.024],
+          [0, 0.285 + i * 0.024],
+          [0.57, 0.285 + i * 0.024],
         ],
-        0.007,
+        0.005,
         m.piano,
       );
     for (const side of [-1, 1]) {
+      // The upper blade sweeps back into the fender; the short outer hook
+      // follows the bumper. The actual lens is much smaller than a hood panel.
       const lamp = [
-        [side * 0.31, 0.68, front - 0.035],
-        [side * 0.5, 0.75, front + 0.14],
-        [side * 0.865, 0.87, front + 0.62],
-        [side * 0.875, 0.735, front + 0.4],
-        [side * 0.7, 0.6, front - 0.03],
-      ];
-      // The swept lamps conform to the curved bonnet instead of intersecting it.
-      const fit = ([x, y, z]) => [
-        x,
-        z >= front && Math.abs(x) <= sample(p.body, z, 1) + 0.004
-          ? Math.max(y, bonnetHeight(x, z) + 0.008)
-          : y,
-        z,
-      ];
-      fittedLamp(group, lamp, m.piano, fit);
-      tube(
-        group,
-        "headlamp-chrome-outline",
-        fittedLine(lamp, fit, true),
-        0.006,
-        m.chrome,
-        true,
-      );
-      const lens = mesh(
-        group,
-        "bi-beam-projector",
-        new T.SphereGeometry(0.048, 20, 12),
-        m.lens,
-      );
-      lens.scale.z = 0.4;
-      lens.position.set(side * 0.6, 0.727, front + 0.065);
-      ellipse(
-        group,
-        "projector-ring",
-        side * 0.6,
-        0.727,
-        front + 0.044,
-        0.045,
-        0.041,
-        0.006,
-        m.chrome,
-      );
-      tube(
-        group,
+        [0.32, 0.675],
+        [0.52, 0.737],
+        [0.845, 0.875],
+        [0.838, 0.802],
+        [0.766, 0.692],
+        [0.703, 0.622],
+        [0.677, 0.68],
+      ].map(([x, y]) => [side * x, y]);
+      patch("prius-angular-headlight", lamp, m.lens, 0.003);
+      line("headlamp-chrome-outline", lamp, 0.004, m.chrome, true);
+      const projector = [
+        [0.52, 0.712],
+        [0.59, 0.734],
+        [0.636, 0.732],
+        [0.632, 0.701],
+        [0.559, 0.691],
+      ].map(([x, y]) => [side * x, y]);
+      patch("bi-beam-projector", projector, m.piano, 0.008);
+      line(
         "prius-LED-signature",
         [
-          [side * 0.33, 0.689, front - 0.046],
-          [side * 0.5, 0.757, front + 0.13],
-          [side * 0.866, 0.871, front + 0.61],
+          [side * 0.34, 0.68],
+          [side * 0.52, 0.743],
+          [side * 0.837, 0.866],
         ],
-        0.008,
+        0.004,
         m.led,
       );
-      const fog = map([
-        [side * 0.69, 0.53],
-        [side * 0.75, 0.49],
-        [side * 0.73, 0.3],
-        [side * 0.66, 0.36],
-      ]);
-      panel(group, "prius-fog-inset", fog, m.piano, [0, 0, -1]);
-      tube(group, "prius-fog-trim", fog, 0.007, m.chrome, true);
-      box(
-        group,
+      line(
+        "prius-headlamp-hook",
+        [
+          [side * 0.833, 0.8],
+          [side * 0.76, 0.69],
+          [side * 0.707, 0.634],
+        ],
+        0.004,
+        m.chrome,
+      );
+      const fog = [
+        [0.69, 0.52],
+        [0.75, 0.49],
+        [0.73, 0.31],
+        [0.67, 0.36],
+      ].map(([x, y]) => [side * x, y]);
+      patch("prius-fog-inset", fog, m.piano);
+      line("prius-fog-trim", fog, 0.005, m.chrome, true);
+      patch(
         "prius-fog-lens",
-        [0.05, 0.035, 0.025],
-        [side * 0.71, 0.43, zAt(0.71) - 0.018],
+        [
+          [0.69, 0.42],
+          [0.726, 0.42],
+          [0.726, 0.447],
+          [0.69, 0.447],
+        ].map(([x, y]) => [side * x, y]),
         m.lens,
-        0.01,
+        0.006,
       );
     }
-    emblem(group, 0, 0.64, front - 0.044, m);
+    emblem(group, 0, 0.635, zAt(0, 0.635) - 0.013, m);
   }
 }
-function addRear(group, p, m, id, rear) {
-  if (id === "alphard") {
-    panel(
+function addRear(group, p, m, id, rear, rearZ) {
+  const patch = (name, points, mat, offset = 0.003) =>
+    mappedPanel(
       group,
+      name,
+      roundedOutline(points, 0.015),
+      mat,
+      (x, y) => [x, y, rearZ(x, y) + offset],
+      [0, 0, 1],
+      [],
+      name.includes("lamp") ? 2 : 3,
+    );
+  const line = (name, points, r, mat) =>
+    tube(
+      group,
+      name,
+      fittedLine(
+        points.map(([x, y]) => [x, y, 0]),
+        ([x, y]) => [x, y, rearZ(x, y) + 0.008],
+      ),
+      r,
+      mat,
+    );
+  if (id === "alphard") {
+    patch(
       "rear-black-garnish",
       [
-        [-0.81, 1.29, rear + 0.026],
-        [0.81, 1.29, rear + 0.026],
-        [0.72, 1.03, rear + 0.026],
-        [-0.72, 1.03, rear + 0.026],
+        [-0.78, 1.28],
+        [0.78, 1.28],
+        [0.71, 1.045],
+        [-0.71, 1.045],
       ],
       m.piano,
-      [0, 0, 1],
     );
-    for (const s of [-1, 1]) {
-      const points = [
-        [s * 0.33, 1.255, rear + 0.02],
-        [s * 0.81, 1.29, rear - 0.01],
-        [s * 0.89, 1.22, rear - 0.14],
-        [s * 0.83, 1.065, rear - 0.09],
-        [s * 0.43, 1.095, rear + 0.02],
-      ];
-      panel(group, "alphard-rear-lamp", points, m.red, [0, 0, 1]);
+    for (const side of [-1, 1]) {
+      const lamp = [
+        [0.33, 1.255],
+        [0.75, 1.28],
+        [0.85, 1.2],
+        [0.81, 1.075],
+        [0.43, 1.095],
+      ].map(([x, y]) => [side * x, y]);
+      patch("alphard-rear-lamp", lamp, m.red, 0.006);
       for (let j = 0; j < 3; j++)
-        tube(
-          group,
+        line(
           "rear-LED-bars",
           [
-            [s * 0.43, 1.12 + j * 0.045, rear + 0.031],
-            [s * 0.73, 1.15 + j * 0.043, rear + 0.027],
-            [s * 0.84, 1.19 + j * 0.025, rear - 0.08],
+            [side * 0.43, 1.12 + j * 0.043],
+            [side * 0.73, 1.15 + j * 0.037],
+            [side * 0.83, 1.185 + j * 0.014],
           ],
-          0.009,
+          0.006,
           m.red,
         );
-      tube(
-        group,
+      line(
         "lower-bumper-reflector",
         [
-          [s * 0.79, 0.32, rear - 0.01],
-          [s * 0.83, 0.56, rear - 0.02],
+          [side * 0.77, 0.34],
+          [side * 0.8, 0.53],
         ],
-        0.018,
+        0.013,
         m.red,
       );
     }
-    emblem(group, 0, 1.255, rear + 0.027, m, true);
+    emblem(group, 0, 1.25, rearZ(0, 1.25) + 0.014, m, true);
     box(
       group,
       "roof-spoiler",
@@ -1107,60 +1174,59 @@ function addRear(group, p, m, id, rear) {
       0.008,
     );
   } else {
-    panel(
-      group,
+    patch(
       "prius-lower-hatch-glass",
       [
-        [-0.72, 1.12, rear + 0.031],
-        [0.72, 1.12, rear + 0.031],
-        [0.67, 0.94, rear + 0.031],
-        [-0.67, 0.94, rear + 0.031],
+        [-0.69, 1.12],
+        [0.69, 1.12],
+        [0.65, 0.94],
+        [-0.65, 0.94],
       ],
       m.privacy,
-      [0, 0, 1],
     );
     box(
       group,
       "prius-rear-spoiler",
-      [1.48, 0.038, 0.19],
+      [1.45, 0.038, 0.19],
       [0, 1.14, rear - 0.07],
       m.paint,
       0.018,
     );
-    for (const s of [-1, 1]) {
-      const outline = [
-        [s * 0.62, 1.14, rear - 0.075],
-        [s * 0.82, 1.15, rear - 0.05],
-        [s * 0.85, 0.86, rear - 0.035],
-        [s * 0.74, 0.43, rear - 0.025],
-        [s * 0.73, 0.56, rear + 0.01],
-        [s * 0.78, 0.89, rear + 0.024],
-      ];
-      panel(group, "prius-vertical-tail-lamp", outline, m.red, [0, 0, 1]);
-      tube(
-        group,
-        "prius-red-light-guide",
+    for (const side of [-1, 1]) {
+      patch(
+        "prius-vertical-tail-lamp",
         [
-          [s * 0.64, 1.14, rear - 0.055],
-          [s * 0.81, 1.12, rear - 0.032],
-          [s * 0.83, 0.87, rear - 0.012],
-          [s * 0.75, 0.48, rear - 0.005],
-        ],
-        0.012,
+          [0.62, 1.1],
+          [0.8, 1.085],
+          [0.83, 0.85],
+          [0.74, 0.43],
+          [0.72, 0.55],
+          [0.77, 0.89],
+        ].map(([x, y]) => [side * x, y]),
         m.red,
       );
-      tube(
-        group,
+      line(
+        "prius-red-light-guide",
+        [
+          [side * 0.64, 1.095],
+          [side * 0.79, 1.065],
+          [side * 0.81, 0.85],
+          [side * 0.745, 0.47],
+        ],
+        0.009,
+        m.red,
+      );
+      line(
         "prius-clear-tail-strip",
         [
-          [s * 0.78, 1.06, rear - 0.013],
-          [s * 0.81, 0.9, rear + 0.013],
+          [side * 0.79, 1.01],
+          [side * 0.8, 0.9],
         ],
-        0.011,
+        0.008,
         m.lens,
       );
     }
-    emblem(group, 0, 0.89, rear + 0.024, m, true);
+    emblem(group, 0, 0.89, rearZ(0, 0.89) + 0.014, m, true);
     box(
       group,
       "high-mounted-stop-light",
@@ -1171,24 +1237,23 @@ function addRear(group, p, m, id, rear) {
     );
   }
   const y = id === "alphard" ? 0.94 : 0.68;
-  tube(
-    group,
+  line(
     "tailgate-panel-gap",
     [
-      [-0.68, y + 0.1, rear - 0.005],
-      [-0.64, 0.44, rear + 0.006],
-      [0, 0.41, rear + 0.012],
-      [0.64, 0.44, rear + 0.006],
-      [0.68, y + 0.1, rear - 0.005],
+      [-0.65, y + 0.1],
+      [-0.62, 0.44],
+      [0, 0.41],
+      [0.62, 0.44],
+      [0.65, y + 0.1],
     ],
-    0.003,
+    0.002,
     m.seam,
   );
   box(
     group,
     "tailgate-handle",
     [0.3, 0.025, 0.018],
-    [0, y + 0.13, rear + 0.026],
+    [0, y + 0.13, rearZ(0, y + 0.13) + 0.008],
     m.piano,
     0.007,
   );
@@ -1200,16 +1265,18 @@ function addRear(group, p, m, id, rear) {
       [0.02, rw[1] + 0.025, rw[0] + 0.012],
       [0.43, rw[1] + 0.035, rw[0] + 0.006],
     ],
-    0.009,
+    0.006,
     m.black,
   );
-  box(
-    group,
+  patch(
     "rear-lower-valance",
-    [1.35, 0.1, 0.055],
-    [0, 0.235, rear - 0.018],
+    [
+      [-0.64, 0.28],
+      [0.64, 0.28],
+      [0.64, 0.21],
+      [-0.64, 0.21],
+    ],
     m.piano,
-    0.025,
   );
 }
 // Each car owns these resources; the environment belongs to its scene.
@@ -1244,9 +1311,17 @@ export function makeCarModel(id = "prius", paint) {
     sill = 0.2;
   // The front/rear corners share one mapping across deck, sides and caps.
   // This rounds the bumper in plan without leaving disconnected corner seams.
-  const roundEnd = (z, lateral = 1) =>
-    z +
-    (z < 0 ? 0.08 : -0.1) * (Math.abs(z) / half) ** 12 * Math.abs(lateral) ** 4;
+  const roundEnd = (z, lateral = 1, y = belt(z)) => {
+    const radius = z < 0 ? 0.24 : 0.19,
+      vertical =
+        0.055 * (2 * clamp((y - sill) / (belt(z) - sill), 0, 1) - 1) ** 2;
+    return (
+      z +
+      Math.sign(-z) *
+        (radius * Math.abs(lateral) ** 3.2 + vertical) *
+        (Math.abs(z) / half) ** 12
+    );
+  };
   const archBottom = (z) => {
     let h = sill;
     for (const a of axles) {
@@ -1260,20 +1335,25 @@ export function makeCarModel(id = "prius", paint) {
   const sideX = (z, y) => {
     const b = belt(z),
       h = halfWidth(z);
-    if (y > b)
-      return (
-        h -
-        0.014 -
-        clamp((y - b) / (id === "alphard" ? 0.68 : 0.49), 0, 1) *
-          (id === "alphard" ? 0.105 : 0.195)
+    const shoulder = 0.1,
+      roofHeight = sample(p.roof, z, 1),
+      roofWidth = sample(p.roof, z, 2);
+    if (y > b) {
+      const t = clamp((y - b) / (roofHeight - b - 0.025), 0, 1);
+      return lerp(h - shoulder, roofWidth, t) + 0.014 * Math.sin(t * Math.PI);
+    }
+    if (y > b - 0.14) {
+      const t = clamp((y - b + 0.14) / 0.14, 0, 1);
+      return h - shoulder * (1 - Math.sqrt(Math.max(0, 1 - t * t)));
+    }
+    const t = clamp((y - sill) / (b - 0.14 - sill), 0, 1),
+      fender = Math.max(
+        ...axles.map((a) => Math.exp(-(((z - a) / 0.48) ** 2))),
       );
-    const t = clamp((y - sill) / (b - sill), 0, 1);
-    return Math.min(
-      h,
+    return (
       h -
-        0.075 * (1 - t) -
-        0.045 * Math.sin(t * Math.PI) +
-        0.014 * Math.exp(-(((t - 0.85) / 0.12) ** 2)),
+      0.11 * (1 - t) ** 3 -
+      0.042 * (1 - fender) * Math.sin(t * Math.PI) ** 2
     );
   };
   for (const side of [-1, 1]) {
@@ -1285,7 +1365,7 @@ export function makeCarModel(id = "prius", paint) {
       (u, v) => {
         const z = lerp(-half, half, u),
           y = lerp(archBottom(z), belt(z), v);
-        return [side * sideX(z, y), y, roundEnd(z)];
+        return [side * sideX(z, y), y, roundEnd(z, 1, y)];
       },
       m.paint,
       [side, 0, 0],
@@ -1299,12 +1379,26 @@ export function makeCarModel(id = "prius", paint) {
             y = p.tyre + Math.sin(a) * r;
           return [side * (sideX(z, y) + 0.005), y, z];
         });
-      tube(group, "sculpted-wheel-arch", pts, 0.014, m.paint);
+      surface(
+        group,
+        "sculpted-wheel-arch",
+        48,
+        4,
+        (u, v) => {
+          const a = lerp(-0.3, Math.PI + 0.3, u),
+            rr = r + v * 0.045,
+            z = axle + Math.cos(a) * rr,
+            y = p.tyre + Math.sin(a) * rr;
+          return [side * (sideX(z, y) + 0.004 * Math.sin(v * Math.PI)), y, z];
+        },
+        m.paint,
+        [side, 0, 0],
+      );
       tube(
         group,
         "wheel-arch-inner-liner",
         pts.map((v) => [v[0] - side * 0.018, v[1] - 0.012, v[2]]),
-        0.018,
+        0.008,
         m.black,
       );
     }
@@ -1397,15 +1491,15 @@ export function makeCarModel(id = "prius", paint) {
   const deck = surface(
     group,
     "body-deck",
-    120,
-    24,
+    90,
+    20,
     (u, v) => {
       const z = lerp(-half, half, u),
         t = v * 2 - 1;
       return [
         t * sideX(z, belt(z)),
-        belt(z) + 0.045 * (1 - t * t),
-        roundEnd(z, t),
+        belt(z) + 0.065 * (1 - t * t),
+        roundEnd(z, t, belt(z) + 0.065 * (1 - t * t)),
       ];
     },
     m.paint,
@@ -1423,8 +1517,8 @@ export function makeCarModel(id = "prius", paint) {
       16,
       (u, v) => {
         const t = u * 2 - 1,
-          y = lerp(sill, belt(end) + 0.045 * (1 - t * t), v);
-        return [t * sideX(end, Math.min(y, belt(end))), y, roundEnd(end, t)];
+          y = lerp(sill, belt(end) + 0.065 * (1 - t * t), v);
+        return [t * sideX(end, Math.min(y, belt(end))), y, roundEnd(end, t, y)];
       },
       m.paint,
       [0, 0, normal],
@@ -1448,22 +1542,40 @@ export function makeCarModel(id = "prius", paint) {
         w = halfWidth(z);
       return [
         x,
-        belt(z) + 0.045 * (1 - (x / w) ** 2) + 0.002,
+        belt(z) + 0.065 * (1 - (x / sideX(z, belt(z))) ** 2) + 0.002,
         roundEnd(z, x / w),
       ];
     });
     tube(group, "hood-shut-line", pts, 0.0018, m.seam);
   }
   addCabin(group, p, m, id, sideX);
-  addFront(
-    group,
-    p,
-    m,
-    id,
-    -half,
-    (x, z) => belt(z) + 0.045 * (1 - (x / halfWidth(z)) ** 2),
+  // Locate the front skin on the rounded bumper, bonnet and fender before
+  // attaching lamps. This keeps lenses flush as they sweep around each corner.
+  const endSkin = (end, toward, x, y) => {
+    const inside = (z) => {
+      const b = belt(z),
+        w = sideX(z, Math.min(y, b));
+      return Math.abs(x) <= w && y <= b + 0.065 * (1 - (x / sideX(z, b)) ** 2);
+    };
+    let lo = end,
+      hi = toward;
+    if (!inside(lo)) {
+      for (let i = 0; i < 22; i++) {
+        const mid = (lo + hi) / 2;
+        if (inside(mid)) hi = mid;
+        else lo = mid;
+      }
+      lo = hi;
+    }
+    return (
+      roundEnd(lo, clamp(x / sideX(lo, Math.min(y, belt(lo))), -1, 1), y) +
+      Math.sign(end) * 0.01
+    );
+  };
+  addFront(group, m, id, (x, y) =>
+    endSkin(-half, p.windshield.bottom[0], x, y),
   );
-  addRear(group, p, m, id, half);
+  addRear(group, p, m, id, half, (x, y) => endSkin(half, half - 0.85, x, y));
   for (const axle of axles)
     for (const side of [-1, 1]) {
       const w = makeWheel(p, m, id, side);

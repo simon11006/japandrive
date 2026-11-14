@@ -19,6 +19,37 @@ export function setLanguage(lang) {
 }
 
 const EN = {
+  "제동을 누른 채 ‘파킹’ 버튼을 눌러 출발하세요.": "Hold the brake and tap Park to release it.",
+  "현재 선택": "Your selection",
+  "다음 단계": "Next step",
+  "주차 완료!": "Parked!",
+  "상세 기록": "Full record",
+  "요약 보기": "Summary",
+  "안전운전 기록을 쌓아 보세요.": "Build your safe driving record.",
+  "기록된 위반이 없습니다.": "No violations recorded.",
+  "다음에는 다른 코스나 교통량으로 도전해 보세요.": "Try a different course or traffic level next.",
+  "전·후진 전환": "Drive / reverse",
+  "파킹": "Park",
+  "R키를 누를 때마다 전진과 후진 전환": "Press R to alternate drive and reverse",
+  "B키: 주차 브레이크 잠금과 해제": "B: set or release the parking brake",
+  "↓ 또는 제동 버튼을 누른 채 전·후진을 전환하세요.": "Hold ↓ or the brake pedal to change direction.",
+  "완전히 멈춘 뒤 파킹을 사용하세요.": "Stop completely before using Park.",
+  "↓ 또는 제동 버튼을 누른 채 파킹을 해제하세요.": "Hold ↓ or the brake pedal to release Park.",
+  "파킹 · 주차 브레이크가 걸렸습니다.": "Park · parking brake is set.",
+  "파킹 해제 · 브레이크를 천천히 놓으세요.": "Park released · ease off the brake.",
+  "P 파킹 · ↓ + R로 전·후진 전환": "P Park · ↓ + R to change direction",
+  "현재 후진 · ↑ 가속 / ↓ 브레이크": "Reverse · ↑ accelerate / ↓ brake",
+  "현재 전진 · ↑ 가속 / ↓ 브레이크": "Drive · ↑ accelerate / ↓ brake",
+  "↑ 가속 · ↓ 브레이크 · ←/→ 조향 (WASD 가능)": "↑ accelerate · ↓ brake · ←/→ steer (WASD also works)",
+  "↑ 가속 · ↓ 브레이크 · ←/→ 조향 (WASD 가능) · Z/X 방향지시등 · Q/E 미러 확인": "↑ accelerate · ↓ brake · ←/→ steer · Z/X indicators · Q/E mirrors",
+  "R 전·후진 전환 · B 파킹 · Q / E 미러 · C 후방 · P 일시정지 · M 지도": "R drive / reverse · B Park · Q/E mirrors · C rear view · P pause · M map",
+  "파킹 · 주차 브레이크 걸기·풀기 (해제할 때는 제동 유지)": "Park · set/release the parking brake (hold the brake to release)",
+  "전진 ↔ 후진 전환 (정차 후 브레이크를 누른 채, 누를 때마다 전환)": "Drive ↔ reverse (stop and hold the brake; each press switches direction)",
+  "주차 브레이크가 걸려 있습니다 · ↓로 브레이크를 밟은 채 B로 해제하세요": "Parking brake on · hold ↓ and press B to release",
+  "를 계속 누르세요.": "to remain stopped.",
+  "를 떼면 차가 천천히 움직이기 시작합니다(크립).": "to let the car move slowly (creep).",
+  "로 전후진을 번갈아 바꿉니다. 터치 화면에서는 제동을 누르는 손가락을 유지하고 다른 손가락으로 전·후진 전환을 누르세요.": "to alternate drive and reverse. On touchscreens, keep one finger on the brake and tap Drive / reverse with another.",
+
   "왼쪽으로, 새로운 드라이브.": "A new drive. Keep left.",
   "드라이브를 시작하세요": "Start your drive",
   "아무 키나 누르거나 터치하세요": "Press any key or tap to begin",
@@ -594,8 +625,8 @@ const EN = {
 
 // Sentences with numbers or names: [pattern, (match, t) => English].
 const PATTERNS = [
-  [/^획득 \+(\d+)점$/,m=>`Earned +${m[1]} pts`],
-  [/^감점 −(\d+)점$/,m=>`Deductions −${m[1]} pts`],
+  [/^획득 \+(\d+)(?:점)?$/,m=>`Earned +${m[1]} pts`],
+  [/^감점 −(\d+)(?:점)?$/,m=>`Deductions −${m[1]} pts`],
   [/^\+(\d+)점 · (.+)$/, (m,t)=>`+${m[1]} pts · ${t(m[2])}`],
   [/^(\d+)회 · ([+−]\d+점|안내)$/,m=>`${m[1]}× · ${m[2]==='안내'?'Advice':m[2].replace('점',' pts')}`],
   [/^\+(\d+)점$/,m=>`+${m[1]} pts`],

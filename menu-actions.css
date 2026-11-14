@@ -1,0 +1,237 @@
+/* Keep the decision and its next action together, inside a readable width. */
+#select.game-ui {
+  padding-inline: max(var(--menu-edge), calc((100vw - 1440px) / 2));
+  grid-template-rows: 64px 70px minmax(0, 1fr) 110px;
+}
+#select.game-ui .wizard-controls {
+  gap: 24px;
+  padding: 18px 24px;
+  background: linear-gradient(110deg, #152432f7, #0c1926fa);
+  border: 1px solid #9cbdcc55;
+  border-radius: 14px;
+  box-shadow: 0 -12px 50px #0004;
+  align-self: center;
+}
+.selection-summary {
+  flex: 1;
+  min-width: 0;
+}
+.selection-summary > small {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #9cb4c2;
+}
+#select.game-ui #step-selection {
+  margin: 5px 0 0;
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+  color: #edf4f1;
+  overflow-wrap: anywhere;
+}
+#select.game-ui :is(#step-next, #start) {
+  width: 320px;
+  min-height: 68px;
+  flex: 0 0 auto;
+  border: 1px solid #f0ffc3;
+  border-radius: 10px;
+  background: #d8f580;
+  color: #122217;
+  box-shadow:
+    0 5px 0 #7f9d46,
+    0 8px 28px #d4f77822;
+}
+#select.game-ui #step-next {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  text-align: left;
+  padding: 10px 24px;
+}
+#select.game-ui #step-next[hidden] {
+  display: none;
+}
+#step-next > small {
+  font-size: 11px;
+  line-height: 1;
+  color: #476032;
+  font-weight: 650;
+}
+#step-next-label {
+  font-size: 21px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+#select.game-ui #start {
+  font-size: 21px;
+}
+#select.game-ui :is(#step-next, #start):hover {
+  background: #edffb1;
+  box-shadow:
+    0 5px 0 #91ad52,
+    0 8px 32px #d4f77844;
+}
+#select.game-ui :is(#step-next, #start):active {
+  translate: 0 3px;
+  box-shadow: 0 2px 0 #7f9d46;
+}
+#select.game-ui :is(#step-next, #start):focus-visible {
+  outline: 3px solid white;
+  outline-offset: 5px;
+}
+#select.game-ui :is(#step-next, #start):disabled {
+  border-color: #536572;
+  box-shadow: none;
+}
+#select.game-ui #step-next:disabled > small {
+  color: inherit;
+}
+#select.game-ui #step-back {
+  min-height: 48px;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid #8ea7b633;
+  border-radius: 8px;
+}
+#select.game-ui[data-step="3"] {
+  grid-template-rows: 64px 70px minmax(0, 1fr) 110px minmax(20px, 0.16fr);
+}
+#select.game-ui[data-step="3"] #difficulty-panel {
+  justify-content: safe flex-end;
+  padding-bottom: 24px;
+}
+#select.game-ui .difficulty-card {
+  display: block;
+  padding: 22px;
+}
+#select.game-ui .traffic-visual {
+  height: 105px;
+}
+#select.game-ui .traffic-note {
+  font-size: 13px;
+}
+/* R always changes direction; B always operates the parking hold. */
+body.driving #drive-toolbar button {
+  min-height: 48px;
+  font-size: 13px;
+}
+body.driving #drive-toolbar kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 21px;
+  margin-left: 5px;
+  border: 1px solid #9db7c56b;
+  border-radius: 4px;
+  font-size: 12px;
+}
+body.driving .touch-tools [data-action="brake"] {
+  display: none;
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  #select.game-ui,
+  #select.game-ui[data-step="3"] {
+    padding-inline: 16px;
+    grid-template-rows: 92px 54px minmax(0, 1fr) calc(
+        104px + env(safe-area-inset-bottom)
+      );
+  }
+  #select.game-ui .wizard-controls {
+    padding: 13px 12px;
+    gap: 12px;
+    border-radius: 12px;
+  }
+  .selection-summary {
+    display: none;
+  }
+  #select.game-ui :is(#step-next, #start) {
+    flex: 1;
+    width: auto;
+    max-width: none;
+    min-height: 64px;
+  }
+  #step-next-label {
+    font-size: 18px;
+  }
+  #select.game-ui #step-back {
+    min-width: 54px;
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+  #select.game-ui[data-step="3"] #difficulty-panel {
+    justify-content: flex-start;
+    padding-top: 8px;
+    overflow: auto;
+  }
+  #select.game-ui .difficulties {
+    grid-template-columns: 1fr;
+  }
+  #select.game-ui .difficulty-card {
+    padding: 14px 16px 14px 36%;
+    min-height: 126px;
+  }
+  #select.game-ui .traffic-level {
+    display: block;
+  }
+  #select.game-ui .difficulty-card .traffic-visual {
+    position: absolute;
+    left: 7px;
+    top: 12px;
+    width: 26%;
+    height: 86px;
+    margin: 0;
+  }
+  #select.game-ui .traffic-visual i {
+    height: 12px;
+    width: 8px;
+    top: calc(var(--row) * 17px);
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #select.game-ui,
+  #select.game-ui[data-step="3"] {
+    grid-template-rows: 44px 40px minmax(0, 1fr) 76px;
+  }
+  #select.game-ui .wizard-controls {
+    padding: 8px 14px;
+    gap: 16px;
+    border-radius: 9px;
+  }
+  #select.game-ui :is(#step-next, #start) {
+    width: 240px;
+    min-height: 54px;
+    padding: 6px 18px;
+  }
+  #step-next-label,
+  #select.game-ui #start {
+    font-size: 17px;
+  }
+  #step-next > small {
+    font-size: 9px;
+  }
+  #select.game-ui #step-selection {
+    font-size: 12px;
+  }
+  #select.game-ui[data-step="3"] #difficulty-panel {
+    justify-content: center;
+    padding-bottom: 8px;
+    overflow: auto;
+  }
+  #select.game-ui .difficulty-card {
+    padding: 12px;
+  }
+  #select.game-ui .traffic-visual {
+    height: 54px;
+    margin: 4px;
+  }
+  #select.game-ui .traffic-note {
+    font-size: 10px;
+  }
+  body.driving #drive-toolbar button {
+    min-height: 42px;
+    font-size: 10px;
+  }
+  body.driving #drive-toolbar kbd {
+    display: none;
+  }
+}

@@ -13,6 +13,8 @@
     <link rel="stylesheet" href="responsive-drive.css" />
     <link rel="stylesheet" href="score-ui.css" />
     <link rel="stylesheet" href="menu-ui.css" />
+    <link rel="stylesheet" href="menu-actions.css" />
+    <link rel="stylesheet" href="result-compact.css" />
   </head>
   <body>
     <canvas id="scene" aria-label="일본 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
@@ -22,7 +24,7 @@
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.12</span><button id="fullscreen" data-fullscreen>전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.13</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -52,7 +54,7 @@
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.12</span>
+        <span class="title-version">TEST 0.13</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
@@ -179,8 +181,8 @@
       </section>
       <nav class="wizard-controls" aria-label="선택 단계 이동">
         <button id="step-back"><kbd>Esc</kbd> 이전</button>
-        <p id="step-selection" aria-live="polite"></p>
-        <button id="step-next" class="primary">차량 선택 →</button>
+        <div class="selection-summary"><small>현재 선택</small><p id="step-selection" aria-live="polite"></p></div>
+        <button id="step-next" class="primary"><small>다음 단계</small><strong id="step-next-label">차량 선택 →</strong></button>
         <button id="start" class="primary" disabled hidden>운전 시작</button>
       </nav>
       <div id="loading" role="status"></div>
@@ -196,7 +198,7 @@
       <p id="instruction"></p>
       <p id="distance"></p>
       <p id="road-status" class="fine"></p>
-      <small>W 가속 · S 제동 · A/D 조향</small><button id="reset-position">출발 위치로 돌아가기</button>
+      <small>↑ 가속 · ↓ 브레이크 · ←/→ 조향 (WASD 가능)</small><button id="reset-position">출발 위치로 돌아가기</button>
     </aside>
     <div id="hint" hidden role="status"></div>
     <div id="course-drive-status" hidden><small id="course-drive-name"></small><strong id="course-drive-time"></strong><span id="course-drive-stage">내비게이션을 따라 주행</span></div>
@@ -220,8 +222,8 @@
     <div id="drive-toolbar" hidden>
       <span id="gear-state">D 전진</span>
       <div>
-        <button id="gear-forward" aria-pressed="true">D 전진</button
-        ><button id="gear-reverse" aria-pressed="false">R 후진</button
+        <button id="gear-toggle" title="R키를 누를 때마다 전진과 후진 전환">전·후진 전환 <kbd>R</kbd></button
+        ><button id="parking-toggle" aria-pressed="false" title="B키: 주차 브레이크 잠금과 해제">파킹 <kbd>B</kbd></button
         ><button id="nav-closer">내비 확대 <kbd>M</kbd></button>
       </div>
     </div>
@@ -244,7 +246,7 @@
       <div><small>기어</small><strong id="gear">D</strong></div>
       <div><small>남은 거리</small><strong id="remaining">—</strong></div>
       <div class="keys">
-        W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향 · Z / X 방향지시등<br />R 전후진 · B 주차 브레이크 · Q / E 미러 · C 후방 · P 일시정지 · M 지도
+        W / ↑ 가속 · S / ↓ 제동 · A D / ← → 조향 · Z / X 방향지시등<br />R 전·후진 전환 · B 파킹 · Q / E 미러 · C 후방 · P 일시정지 · M 지도
       </div>
     </footer>
     <div id="result" hidden></div>
@@ -262,12 +264,12 @@
         </nav>
         <section data-tab="keys">
           <table class="key-table">
-            <tr><td><kbd>W</kbd> <kbd>↑</kbd></td><td>가속. 누르는 시간만큼 페달이 깊어집니다.</td></tr>
-            <tr><td><kbd>S</kbd> <kbd>↓</kbd> <kbd>Space</kbd></td><td>브레이크. 짧게 누르면 약하게, 길게 누르면 강하게.</td></tr>
-            <tr><td><kbd>A</kbd> <kbd>D</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>핸들. 누르는 동안 천천히 돌아갑니다.</td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>W</kbd></td><td>가속. 누르는 시간만큼 페달이 깊어집니다.</td></tr>
+            <tr><td><kbd>↓</kbd> <kbd>S</kbd> <kbd>Space</kbd></td><td>브레이크. 짧게 누르면 약하게, 길게 누르면 강하게.</td></tr>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>A</kbd> <kbd>D</kbd></td><td>핸들. 누르는 동안 천천히 돌아갑니다.</td></tr>
             <tr><td><kbd>Z</kbd> / <kbd>X</kbd></td><td>왼쪽 / 오른쪽 방향지시등. <b>같은 키를 다시 누르면 꺼집니다.</b> 회전한 뒤 핸들을 풀면 자동으로 꺼집니다.</td></tr>
-            <tr><td><kbd>B</kbd></td><td>주차 브레이크 걸기·풀기 (정차 중에만)</td></tr>
-            <tr><td><kbd>R</kbd></td><td>D(전진) ↔ R(후진) 바꾸기 (완전히 멈춘 뒤)</td></tr>
+            <tr><td><kbd>B</kbd></td><td>파킹 · 주차 브레이크 걸기·풀기 (해제할 때는 제동 유지)</td></tr>
+            <tr><td><kbd>R</kbd></td><td>전진 ↔ 후진 전환 (정차 후 브레이크를 누른 채, 누를 때마다 전환)</td></tr>
             <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>누르는 동안 왼쪽 / 오른쪽 미러 쪽으로 고개 돌리기</td></tr>
             <tr><td><kbd>C</kbd></td><td>뒤돌아보기</td></tr>
             <tr><td><kbd>M</kbd></td><td>내비게이션 화면 가까이 보기</td></tr>
@@ -279,12 +281,12 @@
         </section>
         <section data-tab="start" hidden>
           <ol class="manual-steps">
-            <li><b>출발:</b> 처음에는 주차 브레이크가 걸려 있습니다. <kbd>S</kbd>(브레이크)를 누른 채 <kbd>B</kbd>로 풀고, <kbd>S</kbd>를 떼면 차가 천천히 움직이기 시작합니다(크립).</li>
-            <li><b>크립:</b> 하이브리드 자동변속 차는 D·R에서 브레이크를 떼면 시속 6km 정도로 움직입니다. 신호 대기 중에는 <kbd>S</kbd>를 계속 누르세요.</li>
+            <li><b>출발:</b> 처음에는 주차 브레이크가 걸려 있습니다. <kbd>↓</kbd>(브레이크)를 누른 채 <kbd>B</kbd>로 풀고, <kbd>↓</kbd>를 떼면 차가 천천히 움직이기 시작합니다(크립).</li>
+            <li><b>크립:</b> 하이브리드 자동변속 차는 D·R에서 브레이크를 떼면 시속 6km 정도로 움직입니다. 신호 대기 중에는 <kbd>↓</kbd>를 계속 누르세요.</li>
             <li><b>내비게이션:</b> 왼쪽 화면 위 초록 띠가 다음 회전과 남은 거리입니다. 아래 흰 띠는 남은 시간과 도착 예정 시각입니다.</li>
             <li><b>회전:</b> 30m 전에 방향지시등을 켜고 속도를 줄입니다. 좌회전은 왼쪽 차선 그대로, 우회전은 대향차가 지나간 뒤에 합니다.</li>
             <li><b>주차:</b> 초록색 P 주차면 안에 차체 전체를 넣고, 제동을 눌러 1초 동안 완전히 멈추면 완료입니다. 전진·후진 모두 가능합니다.</li>
-            <li><b>기어 변경:</b> 완전히 멈추고 <kbd>S</kbd> 또는 제동 버튼을 누른 채 <kbd>R</kbd>로 전후진을 바꿉니다. 터치 화면에서는 제동을 누르는 손가락을 유지하고 다른 손가락으로 D·R을 누르세요.</li>
+            <li><b>기어 변경:</b> 완전히 멈추고 <kbd>↓</kbd> 또는 제동 버튼을 누른 채 <kbd>R</kbd>로 전후진을 번갈아 바꿉니다. 터치 화면에서는 제동을 누르는 손가락을 유지하고 다른 손가락으로 전·후진 전환을 누르세요.</li>
             <li><b>후진 주차:</b> R에서는 내비 화면이 후방카메라로 바뀝니다. 빨간 선은 약 0.5m, 노란 선은 약 1m입니다.</li>
             <li><b>교차로 안내:</b> 흰 정지선 앞에서 신호를 확인하세요. 민트색 점선은 코스의 회전 방향을 알려주는 게임용 유도선입니다. 신호 주기는 짧은 연습 코스에 맞춰 조정되어 있습니다.</li>
             <li><b>일본의 우회전 신호:</b> 일반 녹색 신호에서는 대향 직진·좌회전 차량을 확인하고 우회전합니다. 빨간 등 아래 녹색 → 화살표가 켜지면 화살표 방향으로 진행할 수 있습니다. 게임의 화살표 신호는 녹색 → 황색 → 빨강+우회전 화살표 → 황색 → 전방향 빨강 순서입니다. <a href="https://www.npa.go.jp/laws/notification/koutuu/kisei/kisei20240326_2.pdf" target="_blank" rel="noopener">일본 경찰청 지침</a></li>
