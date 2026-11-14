@@ -1,5 +1,5 @@
 import { t } from "./i18n.mjs";
-import {prepareSignalLayouts,roadsideSpace,roadJunctions} from "./junctions.mjs";
+import {prepareSignalLayouts,roadsideSpace,roadJunctions,pedestrianSignalMounts} from "./junctions.mjs";
 import {stripPolygon,approachMarkings,maneuverGuides} from './road-markings.mjs';
 import { pointInRing } from './map-data.mjs';
 import { buildCourseBuildings, buildCourseEnvironment, updateTollObjects } from './course-environment.mjs';
@@ -848,6 +848,15 @@ export class DriveRenderer {
     this.signalHeads = [];
     prepareSignalLayouts(signals, roads);
     const metal=mat("#747e7f",.4,{metalness:.5});
+    const clear=roadsideSpace(roads);
+    const pedestrianIcons=[false,true].map(walking=>canvasTexture(96,112,c=>{
+      c.fillStyle='#060d12';c.fillRect(0,0,96,112);
+      c.fillStyle='#fff';c.beginPath();c.arc(walking?51:48,19,8,0,Math.PI*2);c.fill();
+      c.strokeStyle='#fff';c.lineWidth=9;c.lineCap='round';c.lineJoin='round';
+      const lines=walking?[[[49,35],[42,61]],[[47,37],[32,49],[19,47]],[[48,37],[62,48],[75,42]],[[42,61],[30,80],[17,94]],[[42,61],[59,75],[69,96]]]
+        :[[[48,35],[48,64]],[[37,38],[34,63]],[[59,38],[62,63]],[[43,62],[41,96]],[[53,62],[55,96]]];
+      for(const line of lines){c.beginPath();line.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.stroke();}
+    }).texture);
     const stops=[],backings=[],crossings=[];
     for(const s of signals){
       const heads=[];
@@ -874,18 +883,27 @@ export class DriveRenderer {
           arrow.position.set(.43,-.49,.16);head.add(arrow);
           box(head,[.4,.03,.2],[.43,-.25,.22],metal);
         }
-        const pedestrian=new THREE.Mesh(new THREE.PlaneGeometry(.24,.48),new THREE.MeshBasicMaterial({map:labelTexture('人','#dbf0da','#172624')}));
-        pedestrian.visible=s.profile!=='flash';
+        const pedestrians=[];
+        if(s.profile!=='flash')for(const mount of pedestrianSignalMounts(approach,clear)){
+          const unit=new THREE.Group();unit.position.copy(this.local(mount,3));unit.rotation.y=mount.rotation;
+          box(unit,[.44,.91,.24],[0,0,0],mat('#1b2529'));
+          const lamps=pedestrianIcons.map((texture,i)=>{
+            const lamp=new THREE.Mesh(new THREE.PlaneGeometry(.34,.39),new THREE.MeshBasicMaterial({map:texture,toneMapped:false}));
+            lamp.position.set(0,i?-.22:.22,.125);unit.add(lamp);
+            box(unit,[.42,.025,.18],[0,(i?-.22:.22)+.22,.18],metal);return lamp;
+          });
+          cylinderBetween(this.signalGroup,this.local(mount).toArray(),this.local(mount,3.15).toArray(),.055,metal);
+          this.signalGroup.add(unit);pedestrians.push(lamps);
+        }
         // Pedestrian unit belongs on the roadside support, not in the lane.
         if(approach.pole){
           const foot=this.local(approach.pole),top=this.local(approach.pole,5.6),end=this.local(approach.head,5.6);
           cylinderBetween(this.signalGroup,foot.toArray(),top.toArray(),.09,metal);
           cylinderBetween(this.signalGroup,top.toArray(),end.toArray(),.065,metal);
           cylinderBetween(this.signalGroup,end.toArray(),this.local(approach.head,5.2).toArray(),.05,metal);
-          pedestrian.position.copy(this.local(approach.pole,2.4));pedestrian.rotation.y=-approach.heading;this.signalGroup.add(pedestrian);
         }
         this.signalGroup.add(head);
-        heads.push({bulbs,arrow,pedestrian,heading:approach.heading});
+        heads.push({bulbs,arrow,pedestrians,heading:approach.heading});
         const markings=approachMarkings(approach);stops.push(markings.stop);backings.push(markings.backing);crossings.push(...markings.crossing);
       }
       this.signalHeads.push({signal:s,heads});
@@ -1247,7 +1265,11 @@ export class DriveRenderer {
         const phase=signalPhase(item.signal,head.heading,time),flashing=phase.startsWith('flash'),
           which=flashing?(Math.floor(time*2)%2===0?(phase==='flash-red'?2:1):-1):{green:0,yellow:1,red:2}[phase];
         if(head.arrow)head.arrow.material.color.set(signalRightArrow(item.signal,head.heading,time)?'#55ffc2':'#18362c');
-        head.pedestrian.material.color.set(pedestrianGreen({signal:item.signal,heading:head.heading},time)?'#86efa8':'#ed7c6d');
+        const walk=pedestrianGreen({signal:item.signal,heading:head.heading},time);
+        for(const lamps of head.pedestrians){
+          lamps[0].material.color.set(walk?'#241519':'#ff565b');
+          lamps[1].material.color.set(walk?'#72ffb4':'#0e2921');
+        }
         head.bulbs.forEach((bulb, i) =>
           bulb.material.color.set(
             i === which ? ["#52ffc4", "#ffcb48", "#ff493b"][i] : ["#164c3a", "#55441d", "#4d2427"][i],

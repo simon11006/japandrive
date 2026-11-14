@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {prepareSignalLayouts,roadClearance,roadsideSpace} from '../junctions.mjs';
+import {prepareSignalLayouts,roadClearance,roadsideSpace,pedestrianSignalMounts} from '../junctions.mjs';
 import {TrafficSimulation,signalPhase,distance,wrapAngle,synchronizeSignals,rectanglesOverlap} from '../simulation.mjs';
 import {courseRoadStore} from '../courses.mjs';
 import {projection} from '../map-data.mjs';
@@ -57,6 +57,9 @@ test('every saved course signal has visible approaches and all supports stay out
  for(const c of catalog.courses){
   const b=JSON.parse(await readFile(new URL('../'+c.bundle,import.meta.url),'utf8')),p=projection(b.origin),roads=courseRoadStore(b,p).roads;
   const signals=prepareSignalLayouts(b.signals.map(s=>({...s,...p.toLocal([s.lon,s.lat])})),roads);
+  const clear=roadsideSpace(roads);
+  for(const s of signals)for(const a of s.approaches)for(const mount of pedestrianSignalMounts(a,clear))
+    assert.ok(roadClearance(mount,roads)>=.35,`${c.id}: pedestrian support in road`);
   for(const s of signals){assert.ok(s.approaches.length,`${c.id} signal ${s.id}`);for(const a of s.approaches){assert.ok(a.pole,`${c.id}: no clear support at ${s.id}`);assert.ok(roadClearance(a.pole,roads)>.9,`${c.id}: pole in road`);}}
  }
 });

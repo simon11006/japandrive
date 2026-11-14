@@ -11,6 +11,7 @@
     <title>KEEP LEFT: Japan Drive · 일본 첫 운전 연습</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="responsive-drive.css" />
+    <link rel="stylesheet" href="score-ui.css" />
   </head>
   <body>
     <canvas id="scene" aria-label="일본 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
@@ -20,7 +21,7 @@
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.9</span><button id="fullscreen" data-fullscreen>전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.10</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -71,7 +72,7 @@
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.9</span>
+        <span class="title-version">TEST 0.10</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
@@ -234,11 +235,12 @@
       <div class="live-velocity">
         <strong id="live-speed">0</strong><small>km/h</small><b id="live-gear">P</b>
       </div>
-      <div class="live-score"><small>운전 점수</small><strong id="live-score">100</strong></div>
+      <div class="live-score"><small>운전 점수</small><strong id="live-score">0</strong></div>
       <div class="hud-blinker right"><span id="blink-right">▶</span><kbd>X</kbd></div>
       <p id="blink-hint" hidden>같은 키(Z / X)를 다시 누르면 꺼집니다 · 회전 후 핸들을 풀면 자동으로 꺼짐</p>
     </div>
     <div id="violation-warning" hidden role="alert"></div>
+    <div id="reward-toast" hidden role="status" aria-live="polite"></div>
     <div id="error-note" hidden role="status"></div>
     <div id="camera-warning" hidden role="status"></div>
     <div id="drive-toolbar" hidden>
@@ -281,7 +283,7 @@
         <h2>KEEP LEFT 설명서</h2>
         <nav class="manual-tabs">
           <button data-tab="keys" class="active">조작키</button><button data-tab="start">출발과 주차</button
-          ><button data-tab="rules">일본 도로 규칙</button><button data-tab="score">감점 기준</button
+          ><button data-tab="rules">일본 도로 규칙</button><button data-tab="score">운전 점수</button
           ><button data-tab="trouble">문제 해결</button>
         </nav>
         <section data-tab="keys">
@@ -321,15 +323,19 @@
             <li><b>止まれ(일시정지):</b> 빨간 역삼각형 표지 앞에서는 차가 없어도 반드시 완전히 멈춥니다.</li>
             <li><b>신호:</b> 빨간불에는 정지합니다. 노란불에는 안전하게 정지할 수 있는 경우 정지선 앞에 멈춥니다. 녹색 화살표가 켜지면 그 방향으로 진행할 수 있습니다.</li>
             <li><b>점멸 신호:</b> 빨간 점멸은 일시정지 후 안전 확인, 노란 점멸은 주변 교통에 주의하며 진행합니다.</li>
-            <li><b>보행자:</b> 신호 없는 횡단보도에서 건너려는 사람이 있으면 앞에서 멈추세요. 회전할 때에도 횡단 중인 보행자가 모두 지나간 뒤 출발합니다. 경찰관은 보도에서 순찰하는 인물이며 별도 수신호를 지시하지 않습니다. <a href="https://www.npa.go.jp/bureau/traffic/oudanhodou/info.html" target="_blank" rel="noopener">일본 경찰청 보행자 우선 안내</a></li>
+            <li><b>보행자:</b> 보행자 신호는 빨간색 서 있는 사람과 초록색 걷는 사람으로 표시됩니다. 사람은 자기 신호를 따르고, 운전자는 회전 중에도 횡단보도를 확인합니다. 신호 없는 횡단보도에서 건너려는 사람이 있으면 앞에서 멈추세요. 회전할 때에도 횡단 중인 보행자가 모두 지나간 뒤 출발합니다. 경찰관은 보도에서 순찰하는 인물이며 별도 수신호를 지시하지 않습니다. <a href="https://www.npa.go.jp/bureau/traffic/oudanhodou/info.html" target="_blank" rel="noopener">일본 경찰청 보행자 우선 안내</a></li>
             <li><b>제한속도:</b> 도로의 속도 표지를 확인하세요. 지도에 등록된 값은 화면에 표시하며, 미확인 구간은 '표지 확인'으로 나옵니다.</li>
             <li><b>방향지시등:</b> 회전 30m 전, 차선 변경 3초 전에 켭니다.</li>
             <li><b>미러:</b> 왼쪽 미러는 오른쪽 운전석에서 멀리 있습니다. 좌회전·주차 전에는 <kbd>Q</kbd>로 꼭 확인하세요.</li>
           </ul>
         </section>
         <section data-tab="score" hidden>
+          <p>0점에서 시작합니다. 안전하게 운전하면 점수가 쌓이고, 위반하면 감점됩니다. 최종 점수는 획득 점수에서 감점을 뺀 값이며 음수가 될 수도 있습니다.</p>
+          <h3>안전운전 보상</h3>
+          <table id="manual-rewards" class="key-table"></table>
+          <h3>감점 기준</h3>
           <table id="manual-penalties" class="key-table"></table>
-          <p class="fine">같은 위반이 이어지면 한 번만 감점합니다. 게임 안의 연습 평가이며 실제 범칙금·벌점이 아닙니다.</p>
+          <p class="fine">안전 주행은 새로 진행한 구간에서, 회전·양보·신호·주차 보상은 각 상황에서 한 번만 획득합니다. 정차 중이거나 같은 길을 반복해서 달리는 동안에는 주행 점수가 쌓이지 않습니다. 방향지시등·회전 후 차로 안내는 감점 없이 개선할 점에 기록합니다. 게임의 점수이며 실제 범칙금·벌점이 아닙니다.</p>
         </section>
         <section data-tab="trouble" hidden>
           <ul class="manual-list">

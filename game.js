@@ -14,6 +14,8 @@ import {
 import { VEHICLES, integrateVehicle, steeringLimit, selectGear } from "./vehicles.mjs";
 import { DrivingInput, bindDriveAction } from './drive-input.mjs';
 import { NAV_ANCHOR, nextNavigationStep } from './navigation.mjs';
+import {sampleRoute} from './road-markings.mjs';
+import {renderDriveResult} from './score-ui.mjs';
 import { sceneFeatures, drawSceneMap } from "./scene-features.mjs";
 import { DriveRenderer } from "./drive-renderer.mjs";
 import { drawNavMap, drawCarMarker } from "./nav-display.mjs";
@@ -27,6 +29,7 @@ import {
   playerAtFault,
   BLINKER_LEAD_METRES,
   VIOLATIONS,
+  REWARDS,
   leftTrafficStatus,
 } from "./driving-rules.mjs";
 import { DriveAudio } from "./audio.mjs";
@@ -136,7 +139,6 @@ let driver,
   trainingMode = "drive",
   feedback = "",
   feedbackUntil = 0,
-  safetyScore = 100,
   lastCollision = 0,
   lastSignalViolation = -10,
   navInfo = {};
@@ -187,6 +189,7 @@ try {
 const keys = new DrivingInput();
 let shiftHoldUntil = 0;
 let laneAdvice='',ruleRoads=null,ruleJunctions=[];
+let rewardUntil=0;
 // Pedal positions ramp like a foot pressing a pedal: a tap is gentle, a held
 // key reaches full travel. Blinker: -1 left, 0 off, 1 right.
 let gasLevel = 0,
@@ -845,6 +848,7 @@ async function startCourse(){
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   try{
     prepareCourseWorld();trainingMode='drive';roadError='';done=false;paused=false;rear=false;active=true;intro=false;navZoom=false;parkedSeconds=0;simulationTime=0;lastCollision=-10;lastSignalViolation=-10;feedbackUntil=0;keys.clear();scoreCard=new DrivingScore();drivenDistance=0;stopHistory.clear();passedCameras.clear();checkedTurns.clear();warningUntil=0;tollAction=false;
+    rewardUntil=0;$('#reward-toast').hidden=true;
     $('#violation-warning').hidden=true;$('#driving-car').textContent=`${car.name} · 우핸들`;$('#destination').textContent=selected.name;
     for(const id of ['#nav','#hud','#hint','#menu'])$(id).hidden=false;
     for(const id of ['#select','#result','#splash'])$(id).hidden=true;
@@ -1309,13 +1313,13 @@ $("#start").onclick = async () => {
     intro = false;
     navZoom = false;
     parkedSeconds = 0;
-    safetyScore = 100;
     simulationTime = 0;
     lastCollision = -10;
     lastSignalViolation = -10;
     feedbackUntil = 0;
     keys.clear();
     scoreCard = new DrivingScore();
+    rewardUntil=0;$('#reward-toast').hidden=true;
     drivenDistance = 0;
     stopHistory.clear();
     passedCameras.clear();
@@ -1709,6 +1713,7 @@ function hud() {
   $("#speed-limit").classList.toggle("over", currentLimit.value != null && speed * 3.6 > currentLimit.value);
   $("#live-score").textContent = scoreCard.score;
   if (simulationTime > warningUntil) $("#violation-warning").hidden = true;
+  if(simulationTime>rewardUntil||!$('#violation-warning').hidden||done)$('#reward-toast').hidden=true;
   Object.assign($("#telemetry").dataset, {
     limit: currentLimit.value ?? "",
     score: scoreCard.score,
@@ -1734,10 +1739,9 @@ function hud() {
       : "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
 }
 
-function coach(message, penalty = 0) {
+function coach(message) {
   feedback = message;
   feedbackUntil = simulationTime + 4;
-  safetyScore = Math.max(0, safetyScore - penalty);
 }
 function warnViolation(event, message) {
   if (!event) return;
@@ -1747,6 +1751,12 @@ function warnViolation(event, message) {
   $("#violation-warning").hidden = false;
   $("#violation-warning").textContent =
     `⚠ ${message || event.name}${event.penalty ? "  ·  −" + event.penalty + "점" : ""}`;
+}
+function showReward(event){
+  if(!event)return;
+  rewardUntil=simulationTime+2.8;
+  $('#reward-toast').hidden=false;
+  $('#reward-toast').textContent=`+${event.points}점 · ${event.name}`;
 }
 function monitorRules(dt) {
   const lane = nearestRoad(pos);
@@ -1765,6 +1775,9 @@ function monitorRules(dt) {
   if(ruleRoads!==store.roads){ruleRoads=store.roads;ruleJunctions=roadJunctions(store.roads).map(j=>({...j,radius:Math.max(...j.arms.map(a=>a.width/2))+car.length/2+1}));}
   const inJunction=ruleJunctions.some(j=>distance(pos,j)<j.radius);
   const laneState=leftTrafficStatus({...pos,heading,gear},lane,{inLot,inJunction});
+  const progress=routeProgress(route,pos,routeInfo.distance);
+  showReward(scoreCard.observeRoute({travelled:progress.travelled,dt,time:simulationTime,speed,
+    eligible:gear>0&&speed>.5&&!speeding&&laneState.correct&&!inLot&&!inJunction&&progress.distance<5}));
   const wrong=laneState.wrong&&speed>.5;
   laneAdvice=wrong?'왼쪽 차로와 진행 방향을 확인하세요':'';
   warnViolation(
@@ -1774,12 +1787,24 @@ function monitorRules(dt) {
   // Turn signal duty: on at least 30 m (about 2 s) before each turn.
   for (const step of steps) {
     const side = turnSide(step.maneuver);
-    if (!side || checkedTurns.has(step)) continue;
+    if (!side) continue;
+    const id=steps.indexOf(step);
+    if(checkedTurns.has(step)){
+      const record=scoreCard.turns.get(id),past=progress.travelled-step.atDistance;
+      if(record&&!record.finished&&past>10&&past<40&&!inJunction){
+        const expected=sampleRoute(route,step.atDistance+12).heading;
+        const aligned=Math.cos(heading-expected)>.8;
+        showReward(scoreCard.completeTurn(id,{time:simulationTime,onLeft:laneState.correct,aligned}));
+        if(!laneState.correct||!aligned)warnViolation(scoreCard.add('turnExit',simulationTime),'회전 후 왼쪽 차로와 내비의 진행 방향을 확인하세요.');
+      }
+      continue;
+    }
     const d = distance(step.point, pos);
     if (d < BLINKER_LEAD_METRES + 15 && d > 12 && blinker !== side && speed > 1)
       coach(`전방 ${side < 0 ? "좌회전" : "우회전"} · ${side < 0 ? "Z" : "X"}로 방향지시등을 켜 주세요.`);
-    if (d < 12) {
+    if (d < 12 && gear>0 && Math.abs(progress.travelled-step.atDistance)<16) {
       checkedTurns.add(step);
+      scoreCard.beginTurn(id,{side,time:simulationTime,indicated:blinker===side&&simulationTime-blinkerSince>=1.5});
       if (blinker !== side || simulationTime - blinkerSince < 1.5)
         warnViolation(
           scoreCard.add("blinker", simulationTime),
@@ -1816,6 +1841,7 @@ function monitorRules(dt) {
         s.passed = true;
         if (!s.stopped)
           warnViolation(scoreCard.add("stop", simulationTime), "일시정지 표지 앞에서 완전히 멈춰 주세요.");
+        else if(leftTrafficStatus({...pos,heading,gear},lane,{inLot}).correct&&scoreCard.cleanSince(simulationTime-2))showReward(scoreCard.reward('stop',rule.id,simulationTime));
       }
       if (ahead > 4 && ahead < 30 && !s.stopped) coach("전방 일시정지 · 정지선 앞에 완전히 멈춰 주세요.");
       s.previous = ahead;
@@ -1838,37 +1864,11 @@ function completeParking() {
   speed = 0;
   parkingBrake = true;
   clearDriveInput();
-  $("#result").hidden = false;
-  $("#result").replaceChildren();
-  const small = document.createElement("small");
-  small.textContent = "드라이브 완료";
-  const h = document.createElement("h1");
-  h.textContent = "주차까지, 잘 도착했습니다.";
-  const p = document.createElement("p");
-  p.textContent = `${parkingGoal.name}\n${car.name} · ${distanceText(drivenDistance)} · ${Math.floor(simulationTime / 60)}분 ${Math.floor(simulationTime % 60)}초`;
-  const score = document.createElement("div");
-  score.className = "final-score";
-  score.textContent = `${scoreCard.score}`;
-  const unit = document.createElement("span");
-  unit.textContent = " / 100점";
-  score.append(unit);
-  const rows = document.createElement("dl");
-  rows.className = "score-breakdown";
-  for (const item of scoreCard.breakdown().filter((r) => r.type !== "camera" || r.count)) {
-    const dt = document.createElement("dt"),
-      dd = document.createElement("dd");
-    dt.textContent = item.name;
-    dd.textContent = `${item.count}회${item.penalty ? " · −" + item.penalty + "점" : ""}`;
-    rows.append(dt, dd);
-  }
-  const note = document.createElement("p");
-  note.className = "fine";
-  note.textContent = "목표 주차면 진입 · 완전 정차 완료. 점수는 게임의 연습 평가입니다.";
-  const b = document.createElement("button");
-  b.className = "primary";
-  b.textContent = "다음 드라이브";
-  b.onclick = () => $("#menu").click();
-  $("#result").append(small, h, p, score, rows, note, b);
+  const summary=scoreCard.finish(simulationTime);
+  $('#reward-toast').hidden=true;
+  renderDriveResult($('#result'),{summary,courseName:courseBundle?selectedCourse?.name:null,
+    parkingName:parkingGoal.name,carName:car.name,distanceLabel:distanceText(drivenDistance),
+    elapsed:simulationTime,onNext:()=>$('#menu').click()});
 }
 
 // ---------- Place search: like a map app's search box ----------
@@ -2231,6 +2231,10 @@ $("#manual-penalties").replaceChildren(
       return row;
     }),
 );
+$('#manual-rewards').replaceChildren(...Object.values(REWARDS).map(v=>{
+  const row=document.createElement('tr');
+  row.innerHTML=`<td>${v.name}</td><td>+${v.points}점</td>`;return row;
+}));
 window.addEventListener("keydown", (e) => {
   if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.code === "F1" || (e.code === "KeyH" && !e.repeat)) {
@@ -2449,6 +2453,12 @@ function frameBody(t) {
         pos={x:previous.x,y:previous.y};speed=0;
         if(wasMoving)warnViolation(scoreCard.add('pedestrian',simulationTime),'보행자와 너무 가깝습니다. 완전히 정지해 보행자가 지나가게 하세요.');
       }
+      for(const c of encounter?.crossings||[]){
+        const f=forward(heading),dx=c.x-pos.x,dy=c.y-pos.y;
+        showReward(scoreCard.observeCrossing(c.id,{frontDistance:dx*f.x+dy*f.y-car.length/2,
+          priority:encounter.priority(c),stopped:speed<.1,dt,time:simulationTime,
+          aligned:gear>0&&Math.abs(Math.cos(heading-c.heading))>.6&&Math.abs(dx*f.y-dy*f.x)<c.width/2+.5}));
+      }
       traffic?.tick(dt, simulationTime, { ...pos, speed, heading, length: car.length, width: car.width });
       // Bodies never pass through each other. Only contact the player drove
       // into is scored; being touched while stopped is not.
@@ -2472,24 +2482,29 @@ function frameBody(t) {
         const approach=approachFor(s,heading);
         if(s.approaches&&!approach)continue;
         const stopDistance=approach?.stopDistance??5;
-        const f = forward(heading),
-          a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - stopDistance,
-          b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - stopDistance,
+        const f = forward(approach?.heading??heading),
+          a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - stopDistance-car.length/2,
+          b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - stopDistance-car.length/2,
           l = Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x);
         const phase=signalPhase(s,heading,simulationTime);
-        if(phase==='flash-red'&&b>0&&b<12&&speed<.1)stopHistory.set('flash-'+s.id,true);
+        const signalKey=`${s.timingId??s.id}:${(approach?.heading??s.axis??0).toFixed(3)}`;
+        if(phase==='flash-red'&&b>=0&&b<12&&speed<.1)stopHistory.set('flash-'+signalKey,true);
         const upcoming=steps.find(step=>step.atDistance>routeProgress(route,pos,routeInfo.distance).travelled-6&&step.maneuver.type==='turn');
         const arrowAllowed=signalRightArrow(s,heading,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
+        const inApproach=gear>0&&l<(approach?approach.width/2+1:5);
+        const mustStop=(phase==='red'&&!arrowAllowed)||phase==='flash-red';
+        if(inApproach)scoreCard.waitAtSignal(signalKey,{dt,stopped:speed<.1,frontDistance:b,mustStop,time:simulationTime});
+        const crossesLine=inApproach&&a>0&&b<=0;
+        const illegal=(phase==='red'&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+signalKey));
         if (
-          a > 0 &&
-          b <= 0 &&
-          l < (approach?approach.width/2+1:5) &&
-          ((phase === "red"&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+s.id))) &&
+          crossesLine && illegal &&
           simulationTime - lastSignalViolation > 3
         ) {
           warnViolation(scoreCard.add("red", simulationTime), "빨간 신호에서는 정지선 앞에 멈춰 주세요.");
           lastSignalViolation = simulationTime;
         }
+        if(crossesLine)showReward(scoreCard.passSignal(signalKey,{time:simulationTime,
+          compliant:!illegal&&(approach?.oneway||((pos.x-s.x)*Math.cos(heading)+(pos.y-s.y)*Math.sin(heading)<-.4))&&(phase==='green'||arrowAllowed||phase==='flash-red')}));
       }
       ruleTick += dt;
       if (ruleTick > 0.1) {

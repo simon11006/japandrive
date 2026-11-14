@@ -72,3 +72,20 @@ export function approachFor(signal,heading){
   return signal.approaches?.filter(a=>Math.abs(wrapAngle(a.heading-heading))<Math.PI/4)
     .sort((a,b)=>Math.abs(wrapAngle(a.heading-heading))-Math.abs(wrapAngle(b.heading-heading)))[0];
 }
+
+// Place pedestrian heads at the two ends of this crosswalk, facing each
+// other across the road. Check all carriageways before adding a support.
+export function pedestrianSignalMounts(approach,clear){
+  const f=forward(approach.heading),r={x:Math.cos(approach.heading),y:Math.sin(approach.heading)};
+  const mounts=[];
+  for(const side of [-1,1]){
+    let mount;
+    for(const extra of [.85,1.25,1.8])for(const ahead of [4.8,1.3,5.5]){
+      const p={x:approach.stop.x+f.x*ahead+r.x*side*(approach.width/2+extra),
+        y:approach.stop.y+f.y*ahead+r.y*side*(approach.width/2+extra)};
+      if(!mount&&clear(p,.35))mount={...p,rotation:Math.atan2(-r.x*side,-r.y*side)};
+    }
+    if(mount)mounts.push(mount);
+  }
+  return mounts;
+}

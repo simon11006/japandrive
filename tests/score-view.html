@@ -1,0 +1,20 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>운전 점수 · 개발 검증</title>
+<link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="../score-ui.css">
+<style>body{background:radial-gradient(ellipse at top,#29433f,#071b25);min-height:100vh}#samples{position:fixed;left:12px;bottom:10px;z-index:60;display:flex;flex-wrap:wrap;gap:6px;font-size:12px;background:#071b25;padding:6px}#samples button{min-height:36px}#result{max-height:calc(100dvh - 85px);top:calc(50% - 28px)}</style>
+<div id="samples"><span>개발 검증 · 예시 기록</span><button data-sample="mixed">혼합 결과</button><button data-sample="safe">안전 주행</button><button data-sample="negative">음수 결과</button><button data-sample="empty">기록 없음</button></div>
+<div id="result"></div>
+<script type="module">
+import {DrivingScore} from '../driving-rules.mjs';import {renderDriveResult} from '../score-ui.mjs';
+function show(kind){
+ const score=new DrivingScore();
+ if(kind==='mixed'||kind==='safe'){
+   for(let n=1;n<=16;n++)score.reward('safeLane',n,n*5);
+   score.reward('leftTurn','a',90);score.reward('rightTurn','b',110);score.reward('signal','c',140);score.reward('pedestrian','d',170);
+ }
+ if(kind==='mixed'||kind==='negative'){score.add('red',180);score.add('wrongWay',200);score.add('collision',220);score.add('blinker',250);}
+ const summary=kind==='empty'?score.summary():score.finish(287);
+ renderDriveResult(document.querySelector('#result'),{summary,courseName:'신주쿠 · 빌딩 사이로',carName:'토요타 알파드',distanceLabel:'974m',elapsed:287,onNext:()=>show('safe')});
+}
+for(const button of document.querySelectorAll('[data-sample]'))button.onclick=()=>show(button.dataset.sample);show('mixed');
+</script></html>

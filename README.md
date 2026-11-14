@@ -1,8 +1,12 @@
-# KEEP LEFT: Japan Drive · 테스트 0.9
+# KEEP LEFT: Japan Drive · 테스트 0.10
 
 일본 첫 운전 연습 게임(한국어·영어). 좌측통행·우핸들 운전을 실제 지도 위에서 익힙니다.
 
 실제 지도 자료를 참고한 짧은 코스를 선택하는 1인칭 운전 웹앱입니다. 지역은 코스 카드에 표시하고, 코스 → 차량 → 교통량 → 출발 확인 순서로 준비합니다. 내비게이션·신호·교차로·도착 후 주차·운전 점수가 하나의 주행으로 연결됩니다. 코스 파일을 동봉해 출발할 때 외부 지도 응답을 기다리지 않습니다.
+
+0.10은 0점에서 시작하는 누적 점수 방식입니다. 올바른 차로에서 제한속도를 지키며 새로 50m를 진행하면 +5점, 방향지시등을 켜고 회전 후 왼쪽 차로로 진입하면 +10점, 신호 대기 후 출발·일시정지는 +10점, 보행자에게 양보하면 +15점, 목표 주차 완료는 +30점입니다. 신호 위반·역주행·보행자 보호 미준수는 −20점, 접촉은 −30점, 과속은 −5점, 일시정지 미준수는 −10점입니다. 순점수는 획득에서 감점을 뺀 값으로 음수도 표시하며 100점 만점이 아닙니다. 방향지시등·회전 후 차로 안내는 감점 없이 개선할 점에 남습니다. 결과 화면은 실제 기록으로 잘한 점과 개선할 점을 구성합니다. 각 상황의 보상은 한 번만 주며 정차·후진·시작 위치 복귀로 중복 획득할 수 없습니다.
+
+보행자 신호는 횡단보도 양끝의 별도 기둥에 빨간색 서 있는 사람·초록색 걷는 사람 두 등으로 표시합니다. 차량 신호와 같은 주기를 사용하고, 보행자는 안전하게 건널 녹색 시간이 남았을 때만 출발합니다. 신호 없는 횡단보도에서도 보행자에게 양보합니다. 참고: [경찰청 보행자 우선](https://www.npa.go.jp/bureau/traffic/oudanhodou/info.html), [경시청 보행 신호 그림](https://www.keishicho.metro.tokyo.lg.jp/kotsu/jikoboshi/bicycle/cycle_kaisei.files/rule.pdf).
 
 | 코스 · 지역 | 예상 시간·주차 포함 | 별점 | 주요 상황 |
 |---|---|---|---|
@@ -48,7 +52,7 @@ Windows에서는 `start-game.bat`을 더블클릭하면 서버가 켜지고 브�
 
 가장 빠른 확인은 타이틀의 **빠른 출발**(모토부 377m)입니다. **드라이브 시작**에서는 코스 카드를 가로로 넘겨 고릅니다. 모든 새 코스는 필요한 도로·주차장·경로를 저장해 두었으므로 공개 지도 API를 호출하지 않고 출발합니다. 새 코스 사용에 전체 섬 오프라인 팩 다운로드는 필요 없습니다.
 
-검증: `node --test tests/*.test.mjs`. 시각 검증 도구는 `tests/course-view.html`이며 게임 메뉴에 노출되지 않습니다. 도시 원자료 갱신은 `node scripts/fetch-city-courses.mjs`(OSM 공개 API, 기존 파일 재사용), 코스 생성은 `node scripts/build-courses.mjs`(저장된 지도만 사용), 배경 타일 갱신은 `node scripts/cache-course-terrain.mjs`(GSI 공개 서버 사용)입니다.
+검증: `node --test tests/*.test.mjs`. 시각 검증 도구는 `tests/course-view.html`과 `tests/score-view.html`이며 게임 메뉴에 노출되지 않습니다. 도시 원자료 갱신은 `node scripts/fetch-city-courses.mjs`(OSM 공개 API, 기존 파일 재사용), 코스 생성은 `node scripts/build-courses.mjs`(저장된 지도만 사용), 배경 타일 갱신은 `node scripts/cache-course-terrain.mjs`(GSI 공개 서버 사용)입니다.
 
 참고 자료: [OpenStreetMap](https://www.openstreetmap.org/copyright), [국토지리원 타일 목록](https://maps.gsi.go.jp/development/ichiran.html), [JAF 신호 규칙](https://english.jaf.or.jp/driving-in-japan/traffic-rules), [NEXCO ETC 안내](https://www.w-nexco.co.jp/faq/02/), [온나 해안도로 경관 계획](https://www.vill.onna.okinawa.jp/userfiles/files/keikankeikaku_sankoushiryou.pdf). 코스 선택의 별점은 법적 면허 평가가 아닌 게임 기준입니다.
 

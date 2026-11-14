@@ -170,25 +170,25 @@ test("a continuous speeding episode is scored once and rearms only after returni
   const score = new DrivingScore();
   for (let i = 0; i < 100; i++) score.sustained("speeding", true, 0.1, i * 0.1);
   assert.equal(score.events.length, 1);
-  assert.equal(score.score, 95);
+  assert.equal(score.score, -5);
   for (let i = 100; i < 125; i++) score.sustained("speeding", false, 0.1, i * 0.1);
   for (let i = 125; i < 160; i++) score.sustained("speeding", true, 0.1, i * 0.1);
   assert.equal(score.events.length, 2);
-  assert.equal(score.score, 90);
+  assert.equal(score.score, -10);
 });
-test("arrival score has a bounded total and a complete per-rule breakdown", () => {
+test("arrival score preserves all deductions and a complete per-rule breakdown", () => {
   const score = new DrivingScore();
   score.add("red", 1);
   score.add("collision", 5);
   score.add("camera", 8);
-  assert.equal(score.score, 70);
+  assert.equal(score.score, -50);
   assert.equal(score.breakdown().find((r) => r.type === "red").count, 1);
   assert.equal(
     score.breakdown().reduce((n, r) => n + r.penalty, 0),
-    30,
+    50,
   );
   for (let t = 12; t < 60; t += 4) score.add("red", t);
-  assert.equal(score.score, 0);
+  assert.equal(score.score, -290);
 });
 test("all three traffic levels are populated on the real Motobu network without spawning overlapping bodies", async () => {
   const cache = JSON.parse(await readFile(new URL("../data/preview-cache.json", import.meta.url), "utf8"));
