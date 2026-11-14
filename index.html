@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="responsive-drive.css" />
     <link rel="stylesheet" href="score-ui.css" />
+    <link rel="stylesheet" href="menu-ui.css" />
   </head>
   <body>
     <canvas id="scene" aria-label="일본 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
@@ -21,7 +22,7 @@
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.10</span><button id="fullscreen" data-fullscreen>전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.11</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -31,51 +32,31 @@
       <div class="title-letterbox top" aria-hidden="true"></div>
       <div class="title-letterbox bottom" aria-hidden="true"></div>
       <div class="title-logo">
-        <div class="route-shield" aria-hidden="true"><small>国道</small><b>58</b></div>
-        <div class="sign-plate">
-          <small>日本ドライブ · JAPAN</small>
-          <h1>KEEP LEFT</h1>
-          <p class="sign-sub">JAPAN DRIVE</p>
-          <div class="sign-strip"><span>← 左側通行</span><span>일본 첫 운전 연습</span></div>
-        </div>
-        <p class="title-tagline">도심에서 해안까지. 짧은 코스, 다양한 첫 경험.</p>
+        <small class="title-eyebrow"><i></i> JAPAN DRIVING EXPERIENCE</small>
+        <h1>KEEP<span>LEFT<span class="title-arrow" aria-hidden="true">↖</span></span></h1>
+        <p class="title-tagline">왼쪽으로, 새로운 드라이브.</p>
       </div>
-      <button id="press-start" class="press-start">
-        <span>PRESS ANY KEY</span><small>아무 키나 누르거나 화면을 클릭하세요</small>
-      </button>
+      <button id="press-start" class="press-start"><span>드라이브를 시작하세요 <b>→</b></span><small>아무 키나 누르거나 터치하세요</small></button>
       <nav id="title-menu" class="title-menu" aria-label="메인 메뉴" hidden>
-        <button id="play" class="menu-item" data-hint="코스의 별점과 예상 시간을 확인하고, 차량과 교통량을 골라 출발하세요.">
-          <i>01</i><span>드라이브 시작</span><em>START</em>
-        </button>
-        <button id="quick-play" class="menu-item" data-hint="모토부 마을길 543m · 약 3–4분 · 신호와 주차까지 바로 연습합니다.">
-          <i>02</i><span>빠른 출발</span><em>QUICK DRIVE</em>
-        </button>
-        <button id="title-view" class="menu-item" data-hint="시야각과 좌석 위치를 내 모니터와 자세에 맞춥니다.">
-          <i>03</i><span>시야 설정</span><em>VIEW</em>
-        </button>
-        <button id="splash-help" class="menu-item" data-hint="조작키, 출발·주차 방법, 일본 도로 규칙, 감점 기준을 확인합니다.">
-          <i>04</i><span>설명서</span><em>MANUAL</em>
-        </button>
-        <button id="title-sources" class="menu-item" data-hint="지도 · 차량 자료와 게임이 재현한 범위를 확인합니다.">
-          <i>05</i><span>자료와 재현 범위</span><em>CREDITS</em>
-        </button>
+        <button id="play" class="menu-item" data-hint="코스와 차량을 고르고, 나만의 드라이브를 시작하세요."><i>01</i><span>드라이브 시작</span><em>→</em></button>
+        <button id="quick-play" class="menu-item" data-hint="모토부 · 첫 드라이브 / 3–5분 / 바로 출발"><i>02</i><span>빠른 출발</span><em>↗</em></button>
+        <button id="title-view" class="menu-item secondary" data-hint="운전석 시야와 좌석 위치를 조절합니다."><span>시야 설정</span></button>
+        <button id="splash-help" class="menu-item secondary" data-hint="조작 방법과 도로 규칙, 점수 안내"><span>플레이 가이드</span></button>
+        <button id="title-sources" class="menu-item secondary" data-hint="지도·차량 자료와 재현 범위"><span>크레딧</span></button>
         <p id="menu-hint" class="menu-hint" aria-live="polite"></p>
       </nav>
-      <aside class="stage-card">
-        <div class="stage-head"><small>JAPAN DRIVE</small><strong>도쿄에서 오키나와까지</strong></div>
-        <canvas id="intro-map" aria-label="선택한 드라이브 코스 지도"></canvas>
-        <span>6개 지역 · 11개 코스 · 예상 3–9분</span>
-      </aside>
+      <aside class="stage-card"><small>EXPLORE JAPAN</small><strong>도시의 골목에서<br>섬의 해안까지.</strong><span>6개 지역 <b>·</b> 11개 코스 <b>·</b> 3–9분</span><canvas id="intro-map" hidden aria-label="선택한 드라이브 코스 지도"></canvas></aside>
       <footer class="title-footer">
         <div class="title-loading">
           <p id="intro-status" role="status">드라이브 코스를 불러오는 중…</p>
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.10</span>
+        <span class="title-version">TEST 0.11</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
+      <div class="menu-top"><span class="menu-wordmark">KEEP LEFT<span>JAPAN DRIVE</span></span><button id="setup-help">플레이 가이드 <kbd>H</kbd></button></div>
       <div class="intro">
         <small id="step-caption">STEP 1 / 6</small>
         <h1 id="step-title" tabindex="-1">어디로 떠날까요?</h1>
@@ -84,20 +65,17 @@
       </div>
       <ol id="step-progress" class="step-progress" aria-label="드라이브 준비 단계"></ol>
       <section id="course-panel" aria-label="드라이브 코스 선택">
-        <div class="course-heading"><p>오늘은 어떤 길을 달릴까요?</p><span>예상 시간은 주차 포함 · 옆으로 넘겨 선택</span></div>
+        <div class="course-feature"><article id="course-detail" aria-live="polite"></article><figure class="course-feature-map"><canvas id="course-feature-map" aria-label="선택한 코스 경로 미리보기"></canvas><figcaption><span>ROUTE PREVIEW</span><span>출발 → 주차</span></figcaption></figure></div>
         <div id="course-filters" class="course-filters" role="group" aria-label="코스 종류">
           <button data-filter="all" aria-pressed="true">전체 코스</button><button data-filter="city">도심</button><button data-filter="nature">해안·산길</button><button data-filter="expressway">고속도로</button><button data-filter="beginner">입문</button>
         </div>
         <div class="course-carousel"><button id="course-prev" aria-label="이전 코스">‹</button><div id="course-cards" tabindex="0" aria-label="코스 카드"></div><button id="course-next" aria-label="다음 코스">›</button></div>
-        <div id="course-detail" aria-live="polite"></div>
+
       </section>
       <div id="regions" class="region-tabs"></div>
       <section class="vehicle-section" hidden>
-        <div class="vehicle-heading"><small>함께 달릴 차량</small><span>일본 사양 · 우핸들</span></div>
-        <div id="vehicles" class="vehicles"></div>
-        <p class="fine">
-          프리우스는 낮은 운전 자세와 중앙 계기판, 알파드는 높은 눈높이와 넓은 차체가 특징입니다. 시야와 회전 반경의 차이를 익혀 보세요.
-        </p>
+        <div class="garage-feature"><div class="garage-info"><small>TOYOTA / JAPAN SPEC</small><h2 id="garage-name">PRIUS</h2><p id="garage-description"></p><dl id="garage-specs"></dl></div><div class="garage-view" role="group" aria-label="차량 미리보기"><button data-garage-view="exterior" aria-pressed="true">외관</button><button data-garage-view="interior" aria-pressed="false">운전석</button></div></div>
+        <div id="vehicles" class="vehicles" aria-label="차량 선택"></div>
       </section>
       <section id="planner" class="planner" hidden>
         <div class="places-panel">
@@ -168,8 +146,7 @@
           <canvas id="overview" width="440" height="350" aria-label="선택한 코스 지도"></canvas>
           <div class="trip-details">
             <h2 id="review-course-title"></h2><p id="review-course-meta" class="review-course-meta"></p>
-            <small>출발 준비</small
-            ><label
+            <small class="review-ready">READY TO DRIVE</small><label
               >출발지<strong id="departure-name">출발지를 선택하세요</strong
               ><select id="departure" class="sr-only" tabindex="-1" aria-hidden="true"></select
             ></label>
@@ -188,10 +165,8 @@
                 ><span id="preparation-detail" role="status"></span><button id="prepare-cancel">취소</button>
               </div>
             </div>
-            <button id="start" class="primary" disabled>운전 시작</button>
             <p class="fine">
-              좌측통행을 지키고, 다른 차량과 간격을 유지하세요.<br />목적지의 초록색 P 주차면에 차 전체를 넣고
-              완전히 멈추면 완료됩니다.
+              목적지의 초록색 P 안에 주차하면 드라이브 완료
             </p>
             <button id="quick-test" class="text-button">추천 코스로 변경 · 모토부 숙소 → 카이호우마루</button>
           </div>
@@ -199,15 +174,14 @@
       </section>
       <section id="difficulty-panel" class="difficulty-panel" hidden>
         <div id="difficulties" class="difficulties"></div>
-        <p class="fine">
-          코스의 별점은 도로 구조와 운전 상황의 난이도입니다. 교통량은 별도로 조절할 수 있습니다. 혼잡에서는 도심처럼 많은 차량 사이를 운전합니다.
-        </p>
+        <p class="traffic-note">코스 난이도는 그대로, 함께 달리는 차량 수를 선택하세요.</p>
         <fieldset id="toll-options" hidden><legend>요금소 통과 방식</legend><label><input type="radio" name="toll-mode" value="etc" checked> ETC · 20 km/h 이하로 감속 후 통과</label><label><input type="radio" name="toll-mode" value="general"> 일반 · 정차 후 통행권·요금 정산</label><p class="fine">입구와 출구에 같은 방식을 적용합니다. 게임 안의 모의 절차입니다.</p></fieldset>
       </section>
       <nav class="wizard-controls" aria-label="선택 단계 이동">
         <button id="step-back"><kbd>Esc</kbd> 이전</button>
         <p id="step-selection" aria-live="polite"></p>
         <button id="step-next" class="primary">차량 선택 →</button>
+        <button id="start" class="primary" disabled hidden>운전 시작</button>
       </nav>
       <div id="loading" role="status"></div>
       <p class="fine bottom-note">

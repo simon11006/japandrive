@@ -189,11 +189,7 @@ body.driving[data-drive-layout="landscape"] #violation-warning {bottom:calc(126p
  body.on-title .press-start {left:50%;top:48%;bottom:auto;width:45%;font-size:20px;}
  body.on-title .title-footer {height:30px;padding:0 14px;}
  body.on-title .title-keys {display:none;}
- body.in-menu #select.game-ui {padding-top:65px;padding-bottom:90px;}
- body.in-menu #select.game-ui .intro {margin-bottom:12px;}
  body.in-menu #select.game-ui #step-title {font-size:24px;}
- body.in-menu #select.game-ui .wizard-controls {position:fixed;bottom:var(--safe-bottom);left:0;right:0;padding:8px 20px;background:#071b25f5;z-index:19;}
- body.in-menu #select.game-ui .wizard-controls button {min-height:44px;}
  body.driving[data-drive-layout="landscape"] #course-drive-status {display:none;}
  body.driving[data-drive-layout="landscape"] #driving-status.drive-hud {width:min(275px,calc(100% - 312px));padding:5px 10px 11px;gap:8px;}
  body.driving[data-drive-layout="landscape"] .live-velocity strong {font-size:40px;}

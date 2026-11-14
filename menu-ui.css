@@ -1,0 +1,322 @@
+/* A single game shell: full-screen stage, compact selection deck and action bar. */
+:root {--menu-lime:#d8f580;--menu-white:#f3f4ed;--menu-muted:#aab6c4;--menu-edge:clamp(20px,4vw,72px);}
+#splash[hidden],#select[hidden] {display:none!important;}
+body.on-title #splash.title-screen {position:fixed;inset:0;display:block;padding:0;background:transparent;overflow:hidden;color:var(--menu-white);}
+body.on-title .title-shade {background:linear-gradient(90deg,#080e19ef 0%,#08101bc9 30%,#080e1930 69%,#080e1910),linear-gradient(0deg,#080e19f2,transparent 60%);}
+body.on-title .title-letterbox {display:none;}
+body.on-title .title-lang {top:24px;right:var(--menu-edge);left:auto;gap:2px;padding:3px;border:1px solid #d3e1f024;border-radius:30px;background:#0a132580;}
+body.on-title .title-lang button {border:0;background:none;font-size:11px;padding:8px 14px;border-radius:20px;}
+body.on-title .title-lang button.active {background:#e6efd7;color:#121d24;}
+body.on-title .title-logo {position:absolute;left:var(--menu-edge);top:11vh;width:auto;max-width:56vw;display:block;transform:none;animation:menu-reveal .7s both;}
+.title-eyebrow {display:flex;align-items:center;gap:10px;font:600 10px/1.5 Arial,sans-serif;letter-spacing:3px;color:#d8e6d4;}
+.title-eyebrow i {width:21px;height:3px;background:var(--menu-lime);display:block;}
+body.on-title .title-logo h1 {font:900 clamp(64px,9.8vw,150px)/.8 'Arial Black',Arial,sans-serif;letter-spacing:-.075em;margin:27px 0 20px;color:var(--menu-white);text-shadow:0 10px 50px #0004;}
+.title-logo h1>span {display:block;color:var(--menu-lime);}
+body.on-title .title-logo h1 .title-arrow {display:inline-block;font-family:Arial,sans-serif;font-size:.7em;vertical-align:10%;margin-left:12px;letter-spacing:0;}
+body.on-title .press-start span,body.on-title .press-start small {font-style:normal;text-shadow:none;text-align:left;transform:none;width:100%;margin-left:0;margin-right:0;}
+#select.game-ui {min-height:0;}
+#select.game-ui .vehicle-card {min-height:0;height:100%;}
+#select.game-ui .difficulty-card {min-height:0;}
+#select.game-ui .intro,#select.game-ui[data-step="1"] .intro {min-height:0;}
+body.on-title .title-tagline {font-size:16px;letter-spacing:.01em;line-height:1.5;color:#c6d1d7;margin:0;max-width:none;}
+body.on-title .press-start {position:absolute;left:var(--menu-edge);top:auto;bottom:19vh;width:360px;max-width:80vw;text-align:left;background:transparent;border:0;padding:0;transform:none;}
+body.on-title .press-start>span {display:flex;justify-content:space-between;gap:20px;align-items:center;font-size:21px;font-weight:700;letter-spacing:0;padding:17px 0;border-bottom:1px solid #d8f58088;animation:none;}
+body.on-title .press-start b {font-size:28px;color:var(--menu-lime);}
+body.on-title .press-start small {display:block;margin-top:13px;font-size:11px;letter-spacing:0;color:#9eacb8;animation:menu-pulse 2.5s infinite;}
+body.on-title .title-menu {position:absolute;left:var(--menu-edge);top:auto;bottom:11vh;width:380px;max-width:90vw;display:grid;grid-template-columns:repeat(3,1fr);gap:3px 10px;padding:0;overflow:visible;}
+body.on-title .title-menu[hidden] {display:none;}
+body.on-title .title-menu .menu-item {grid-column:1/-1;display:flex;align-items:center;gap:16px;min-height:50px;padding:10px 16px;margin:0;border:1px solid transparent;border-radius:6px;background:#111c2d80;transform:none;color:#e5ecee;font-family:inherit;font-size:19px;font-weight:600;line-height:1.3;animation:menu-reveal .3s both;box-shadow:none;}
+body.on-title .title-menu .menu-item>* {transform:none;}
+body.on-title .title-menu .menu-item i {font:600 10px/1 Arial,sans-serif;color:#83919f;}
+body.on-title .title-menu .menu-item em {margin-left:auto;font:400 24px/1 Arial,sans-serif;color:inherit;letter-spacing:0;}
+body.on-title .title-menu .menu-item:is(:hover,.active,:focus-visible) {background:var(--menu-lime);color:#17202b;border-color:var(--menu-lime);padding-left:16px;outline:0;}
+body.on-title .title-menu .menu-item:is(:hover,.active,:focus-visible) i {color:#4f6246;}
+body.on-title .title-menu .secondary {grid-column:auto;justify-content:center;min-height:40px;font-size:11px;margin-top:8px;padding:8px 2px;border-color:#c9d8e221;background:#0b14277a;border-radius:4px;}
+body.on-title .title-menu .secondary:is(:hover,.active,:focus-visible) {padding-left:2px;}
+body.on-title .menu-hint {grid-column:1/-1;min-height:16px;font-size:10px;color:#98a7b5;margin:12px 0 0;line-height:1.5;text-shadow:none;}
+body.on-title .stage-card {position:absolute;top:auto;bottom:13vh;right:var(--menu-edge);width:240px;padding:0;border:0;border-left:1px solid #d8f58075;padding-left:24px;background:none;backdrop-filter:none;box-shadow:none;animation:menu-reveal .8s both;}
+body.on-title .stage-card>small {font:600 9px/1.5 Arial,sans-serif;letter-spacing:2px;color:var(--menu-lime);}
+body.on-title .stage-card>strong {display:block;font-size:24px;line-height:1.5;margin:15px 0;letter-spacing:-.04em;color:#e7efed;}
+body.on-title .stage-card>span {font-size:11px;letter-spacing:0;color:#c7d0ce;}.stage-card b {padding:0 5px;font-weight:400;color:#6a7e82;}
+body.on-title .title-footer {height:7vh;min-height:42px;left:var(--menu-edge);right:var(--menu-edge);padding:0;border-top:1px solid #d9e6ed20;color:#90a1af;font-size:10px;}
+body.on-title .title-version {font:500 9px/1 Arial,sans-serif;letter-spacing:2px;}
+body.on-title .title-loading {min-width:0;}.title-keys {font-size:10px;}
+body.on-title .attribution {opacity:.55;font-size:8px;}
+
+#select.game-ui {position:fixed;inset:0;width:100%;height:100dvh;max-height:none;box-sizing:border-box;display:grid;grid-template-rows:64px 70px minmax(0,1fr) 78px;gap:0;padding:0 var(--menu-edge);overflow:hidden;background:linear-gradient(90deg,#080f1bf5,#0a1323dd 48%,#0b1525a8);color:var(--menu-white);}
+#select.game-ui::before,#select.game-ui::after {display:none;}
+#select.game-ui>* {margin:0;max-width:none;min-width:0;}
+#select.game-ui.from-title {animation:menu-reveal .25s both;}
+.menu-top {grid-row:1;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d3e1ee1a;}
+.menu-wordmark {font:900 18px/.9 'Arial Black',Arial,sans-serif;letter-spacing:-1px;}
+.menu-wordmark>span {display:block;font:600 7px/1 Arial,sans-serif;letter-spacing:2.8px;margin-top:6px;color:var(--menu-lime);}
+#setup-help {font-size:10px;background:transparent;border:0;color:#b6c3ca;padding:10px;}
+#select.game-ui .intro,#select.game-ui[data-step="1"] .intro {grid-row:2;display:flex;align-items:center;gap:15px;padding:10px 0;margin:0;}
+#select.game-ui #step-caption {font:600 10px/1.5 Arial,sans-serif;letter-spacing:1px;padding:0;margin:0;color:#94a9b4;grid-column:auto;}
+#select.game-ui #step-title {grid-column:auto;margin:0;padding:0;border:0;border-radius:0;outline:none;background:none;box-shadow:none;text-shadow:none;color:var(--menu-white);font:750 28px/1.3 'Malgun Gothic','Apple SD Gothic Neo',sans-serif;letter-spacing:-1.2px;animation:menu-reveal .25s both;}
+#select.game-ui #step-description {display:none;}
+#select.game-ui #back-title {position:static;display:block;margin-left:auto;padding:8px 0;background:transparent;color:#a7b6c2;border:0;transform:none;font-size:10px;}
+#select.game-ui .step-progress,#select.game-ui[data-step="1"] .step-progress {position:absolute;top:14px;left:50%;transform:translateX(-50%);width:450px;max-width:50%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:0;margin:0;}
+#select.game-ui .step-progress li {margin:0;padding:0;min-width:0;}
+#select.game-ui .step-progress button {min-height:36px;display:flex;align-items:center;justify-content:center;gap:7px;padding:6px;background:none;border:0;transform:none;color:#9aa9b8;border-radius:4px;font-size:11px;}
+#select.game-ui .step-progress button>* {transform:none;}
+#select.game-ui .step-progress .step-number {width:20px;height:20px;flex-basis:20px;display:grid;place-items:center;border:1px solid #93a2b43a;background:none;color:inherit;font:600 9px/1 Arial,sans-serif;border-radius:50%;}
+#select.game-ui .step-progress li.current button {background:#d8f58014;color:var(--menu-lime);border:0;}
+#select.game-ui .step-progress li.current .step-number {background:var(--menu-lime);color:#17212b;}
+#select.game-ui .step-progress li.passed button {color:#c4cfd4;border:0;}
+#select.game-ui .step-progress li.passed .step-number {background:none;color:#c4cfd4;border-color:#718493;}
+#select.game-ui .step-progress button:disabled {opacity:.33;cursor:not-allowed;}
+#select.game-ui :is(button,a):focus-visible {outline:2px solid var(--menu-lime);outline-offset:3px;}
+#select.game-ui :is(#course-panel,.vehicle-section,#difficulty-panel,#planner) {grid-row:3;min-height:0;overflow-y:auto;scrollbar-width:thin;padding:0 0 12px;background:none;border:0;backdrop-filter:none;box-shadow:none;}
+#select.game-ui #course-panel {display:grid;grid-template-rows:minmax(0,1fr) 44px 120px;gap:12px;overflow:hidden;}
+.course-feature {display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:32px;min-height:0;}
+#select.game-ui #course-detail {display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:0;border:0;padding:12px 0;overflow:auto;scrollbar-width:thin;}
+#course-detail .feature-kicker {font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--menu-lime);}
+#select.game-ui #course-detail h2 {font-size:clamp(25px,3.1vw,46px);font-weight:750;line-height:1.25;letter-spacing:-.055em;margin:14px 0 12px;word-break:keep-all;}
+#select.game-ui #course-detail .feature-subtitle {font-size:13px;line-height:1.6;color:#acb9c5;margin:0;max-width:400px;word-break:keep-all;}
+.feature-stats {display:flex;gap:26px;margin:22px 0;}
+.feature-stats>div {display:grid;gap:7px;}.feature-stats small {font-size:9px;color:#899dab;}
+#select.game-ui .feature-stats strong {font-size:20px;line-height:1.3;font-weight:650;color:var(--menu-white);letter-spacing:-.03em;white-space:nowrap;}
+.feature-stats>div:nth-child(2) strong {font-size:17px;letter-spacing:1px;color:var(--menu-lime);}
+.feature-tags {display:flex;flex-wrap:wrap;gap:6px;max-width:470px;}
+.feature-tags span {font-size:10px;padding:5px 9px;background:#cbdcec0b;border:1px solid #b9cfdb26;border-radius:3px;color:#bfccd2;}
+.course-feature-map {margin:0;min-width:0;min-height:0;position:relative;overflow:hidden;border:1px solid #a3bbd22b;border-radius:12px;background:#101b29;}
+#course-feature-map {display:block;width:100%;height:100%;min-height:0;}
+.course-feature-map figcaption {position:absolute;left:18px;right:18px;bottom:13px;display:flex;justify-content:space-between;color:#97a9ba;font:9px/1.5 Arial,sans-serif;letter-spacing:2px;pointer-events:none;}
+#select.game-ui .course-filters {display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;margin:0;scrollbar-width:none;}
+#select.game-ui .course-filters button {min-height:32px;padding:6px 15px;border:1px solid #b8cde329;background:#0c1629aa;border-radius:20px;font-size:11px;color:#a8b8c5;}
+#select.game-ui .course-filters button[aria-pressed="true"] {background:#d8f58019;color:var(--menu-lime);border-color:#d8f58088;}
+#select.game-ui .course-carousel {display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:10px;align-items:center;min-height:0;}
+#select.game-ui .course-carousel>button {width:32px;height:42px;padding:0;border:0;border-radius:5px;background:#26324980;color:#bac8d4;font-size:26px;}
+#select.game-ui #course-cards {display:flex;gap:12px;padding:3px 2px 6px;min-height:0;overflow:auto hidden;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:#58697b transparent;}
+#select.game-ui .course-card {position:relative;flex:0 0 205px;min-width:0;height:104px;padding:0;border:1px solid #a5bcc72c;border-radius:7px;background:#111e2e;overflow:hidden;box-shadow:none;text-align:left;transition:border-color .2s,background .2s;transform:none;}
+#select.game-ui .course-card:is(:hover,.selected) {border-color:var(--menu-lime);background:#1c2a35;box-shadow:none;transform:none;}
+#select.game-ui .course-card.selected::after {content:'✓';position:absolute;right:10px;top:10px;width:17px;height:17px;background:var(--menu-lime);color:#13222e;border-radius:50%;font-size:11px;text-align:center;line-height:17px;}
+#select.game-ui .course-picture {position:absolute;inset:0;height:auto;border:0;opacity:.24;mask-image:linear-gradient(90deg,transparent,#000);}
+#select.game-ui .course-picture canvas {width:100%;height:100%;}
+#select.game-ui .course-card-body {position:relative;padding:12px 14px;}
+#select.game-ui .course-region {font-size:9px;color:#aab8c6;letter-spacing:.05em;}
+#select.game-ui .course-card h2 {font-size:18px;margin:7px 0 10px;line-height:1;letter-spacing:-.04em;}
+#select.game-ui .course-meta {display:flex;justify-content:space-between;margin:0;font-size:10px;color:#b2c2ca;}
+#select.game-ui .course-stars {font-size:10px;letter-spacing:1px;color:var(--menu-lime);}
+
+#select.game-ui[data-step="2"] {background:linear-gradient(90deg,#0a101bec,#0a101b80 37%,#0a101b00 66%);}
+#select.game-ui .vehicle-section {display:grid;grid-template-rows:minmax(0,1fr) 110px;gap:10px;overflow:hidden;}
+.garage-feature {position:relative;min-height:0;}.garage-info {max-width:315px;padding:38px 0 0;}
+.garage-info>small {font:600 10px/1.5 Arial,sans-serif;letter-spacing:2px;color:var(--menu-lime);}
+.garage-info h2 {font:800 clamp(36px,5vw,66px)/1 Arial,sans-serif;letter-spacing:-3px;margin:15px 0;}
+.garage-info p {font-size:13px;color:#adbdc8;line-height:1.8;word-break:keep-all;}
+#garage-specs {display:flex;gap:27px;margin:27px 0 0;}#garage-specs dt {font-size:9px;color:#8499a9;}#garage-specs dd {font-size:18px;font-weight:600;margin:8px 0;color:#edf2e8;}
+.garage-view {position:absolute;right:0;top:6px;display:flex;padding:3px;background:#111d2ac9;border:1px solid #abc1d42b;border-radius:24px;gap:2px;}
+.garage-view button {border:0;border-radius:20px;font-size:11px;padding:9px 16px;color:#b0becc;background:none;}
+.garage-view button[aria-pressed="true"] {color:#122029;background:var(--menu-lime);}
+#select.game-ui .vehicles {display:flex;gap:14px;align-items:stretch;max-width:700px;width:100%;margin:0;}
+#select.game-ui .vehicle-card {display:flex;flex:1;min-width:0;gap:17px;align-items:center;text-align:left;padding:18px;background:#101e2aee;border:1px solid #93b2c333;border-radius:8px;box-shadow:none;transform:none;}
+#select.game-ui .vehicle-card:is(:hover,.selected) {border-color:var(--menu-lime);background:#1e2d35ef;box-shadow:none;transform:none;}
+.vehicle-number {font:500 11px Arial,sans-serif;color:#688191;}.vehicle-choice {display:grid;gap:5px;}
+.vehicle-choice>small {font:600 9px Arial,sans-serif;letter-spacing:1px;color:#9eb2bf;}
+#select.game-ui .vehicle-card strong {font-size:21px;line-height:1.3;color:#f3f4ed;}
+.vehicle-choice>span {font-size:10px;color:#93a8b6;}.selection-mark {margin-left:auto;color:var(--menu-lime);font-size:22px;}
+body[data-garage-view="interior"] #select.game-ui[data-step="2"] {background:linear-gradient(0deg,#08101bec,transparent 50%);}
+body[data-garage-view="interior"] .garage-info {display:none;}
+
+#select.game-ui #difficulty-panel {display:flex;flex-direction:column;justify-content:center;gap:18px;}
+#select.game-ui .difficulties {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+#select.game-ui .difficulty-card {position:relative;padding:25px 24px;text-align:left;transform:none;border:1px solid #a0b8cf3b;border-radius:10px;box-shadow:none;background:#0f1b2be8;overflow:hidden;}
+#select.game-ui .difficulty-card>* {transform:none;}
+#select.game-ui .difficulty-card:is(:hover,.selected) {transform:none;border-color:var(--menu-lime);background:#1d2c35ef;box-shadow:none;}
+.traffic-level {font:500 9px Arial,sans-serif;letter-spacing:2px;color:#8ca5b4;}
+#select.game-ui .difficulty-card>strong {display:inline-block;margin:16px 0 12px;font-size:27px;color:#f3f4ed;}
+.traffic-count {float:right;margin-top:23px;color:var(--menu-lime);font-size:14px;font-weight:500;}
+#select.game-ui .difficulty-card p {font-size:13px;margin:0 0 12px;color:#c1cdd3;}
+#select.game-ui .difficulty-card>span {font-size:11px;color:#91a5b5;}
+#select.game-ui .traffic-visual {height:120px;position:relative;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(33.33% - 1px),#889bab28 calc(33.33% - 1px),#889bab28 33.33%);transform:perspective(250px) rotateX(24deg);margin:10px 12px 8px;}
+#select.game-ui .traffic-visual i {width:10px;height:16px;border-radius:3px;background:#c7d1d8;border:1px solid #e8f0ed66;box-shadow:inset 0 3px #3f535e,inset 0 -3px #364c5b;left:calc(16.67% + var(--lane)*33.33% - 5px);top:calc(var(--row)*21px);animation:none;}
+#select.game-ui .difficulty-card.selected .traffic-visual i {background:#d8f580;}
+.traffic-note {font-size:11px;color:#a2b6c1;line-height:1.5;margin:0;}
+#select.game-ui #toll-options {margin:0;padding:12px 18px;background:#0e1c2add;border-color:#afc6d630;border-radius:8px;}
+#select.game-ui #toll-options legend {font-size:12px;color:#c2d3d9;}
+#select.game-ui #toll-options label {display:inline-flex;font-size:11px;padding:6px 18px 6px 0;letter-spacing:0;}
+#toll-options .fine {display:none;}
+
+#select.game-ui #planner {display:block;}
+#select.game-ui .trip-panel {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:100%;gap:0;border:1px solid #9eafcb2a;border-radius:12px;background:#101c2ad9;padding:0;box-shadow:none;overflow:hidden;backdrop-filter:none;}
+#select.game-ui #overview {width:100%;height:100%;min-height:0;max-height:none;margin:0;}
+#select.game-ui .trip-details {padding:clamp(20px,3vw,42px);overflow-y:auto;}
+#select.game-ui #review-course-title {font-size:clamp(25px,3vw,37px);line-height:1.3;letter-spacing:-.045em;margin:0 0 8px;}
+#select.game-ui .review-course-meta {font-size:11px;color:var(--menu-lime);margin:0 0 24px;}
+#select.game-ui .review-ready {display:none;}
+#select.game-ui .trip-details label {font-size:10px;letter-spacing:0;color:#8da8b9;}
+#select.game-ui .trip-details strong {font-size:16px;margin:7px 0;line-height:1.5;color:#e0e9ed;}
+#select.game-ui .trip-line {font-size:15px;margin:12px 0;color:var(--menu-lime);}
+#select.game-ui .trip-line span {font-size:10px;color:#91a8b8;}
+#select.game-ui .drive-summary {padding:16px 0;border-block:1px solid #b1cbd51f;margin:20px 0 12px;font-size:12px;color:#d6e7cd;}
+#select.game-ui #trip-status {font-size:11px;line-height:1.6;color:#9fb7c3;margin:0;}
+#select.game-ui .trip-details>.fine {font-size:10px;color:#839cab;line-height:1.5;margin:12px 0 0;}
+#select.game-ui .wizard-controls {grid-row:4;display:flex;align-items:center;justify-content:space-between;position:static;inset:auto;gap:20px;padding:12px 0;margin:0;border-top:1px solid #c9dae21f;background:transparent;box-shadow:none;backdrop-filter:none;}
+#select.game-ui .wizard-controls button {transform:none;min-height:44px;padding:12px 24px;font-size:13px;letter-spacing:0;border:0;border-radius:6px;}
+#select.game-ui #step-back {padding-left:0;background:none;border:0;color:#a2b5c3;min-width:70px;}
+#select.game-ui #step-selection {flex:1;text-align:left;margin:0;font-size:11px;color:#a7b9c2;}
+#select.game-ui :is(#step-next,#start) {width:220px;flex:0 0 auto;min-width:0;margin:0;background:var(--menu-lime);color:#172329;font-weight:750;border:0;border-radius:6px;box-shadow:none;animation:none;text-shadow:none;}
+#select.game-ui :is(#step-next,#start):hover {background:#e5ff9c;}
+#select.game-ui :is(#step-next,#start):disabled {background:#26343e;color:#7d939f;opacity:1;}
+#select.game-ui .bottom-note {display:none;}
+#select.game-ui #loading:not(:empty) {position:absolute;top:72px;left:50%;transform:translateX(-50%);z-index:5;border:1px solid #a8bfd544;border-radius:20px;padding:10px 18px;font-size:11px;max-width:80%;background:#112734;}
+@keyframes menu-reveal {from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes menu-pulse {50%{opacity:.5}}
+
+@media(max-width:900px){
+ :root {--menu-edge:24px;}
+ #select.game-ui .step-progress {max-width:52%;width:420px;}
+ #select.game-ui .step-progress button {font-size:10px;gap:4px;}
+ .course-feature {gap:20px;}.feature-stats {gap:18px;margin:17px 0;}
+ #select.game-ui .feature-stats strong {font-size:16px;}
+ .garage-info {max-width:260px;}
+ #select.game-ui .difficulty-card {padding:20px 16px;}
+}
+@media(max-width:600px) and (orientation:portrait){
+ :root {--menu-edge:18px;}
+ body.on-title .title-logo {top:13vh;left:24px;max-width:90%;}
+ body.on-title .title-logo h1 {font-size:clamp(80px,22vw,120px);margin-top:24px;}
+ body.on-title .title-eyebrow {font-size:8px;letter-spacing:2px;}
+ body.on-title .title-tagline {font-size:13px;}
+ body.on-title .title-lang {right:18px;top:18px;}
+ body.on-title .title-menu {left:18px;right:18px;width:auto;max-width:none;top:auto;bottom:10vh;overflow:visible;}
+ body.on-title .title-menu .menu-item {min-height:48px;font-size:17px;}
+ body.on-title .title-menu .secondary {min-height:40px;font-size:11px;}
+ body.on-title .title-menu .menu-hint {font-size:9px;min-height:15px;}
+ body.on-title .press-start {left:24px;bottom:19vh;width:calc(100% - 48px);}
+ body.on-title .press-start>span {font-size:18px;}
+ body.on-title .stage-card,body.on-title .title-keys {display:none;}
+ #select.game-ui {grid-template-rows:92px 54px minmax(0,1fr) 68px;padding-inline:18px;}
+ .menu-top {align-items:flex-start;padding-top:17px;}
+ #setup-help {position:absolute;right:112px;top:9px;padding:12px 0;font-size:9px;}#setup-help kbd{display:none;}
+ #select.game-ui .step-progress,#select.game-ui[data-step="1"] .step-progress {top:53px;left:18px;right:18px;transform:none;width:auto;max-width:none;gap:3px;}
+ #select.game-ui .step-progress button {padding:4px 2px;min-height:30px;}
+ #select.game-ui #step-caption {font-size:8px;letter-spacing:0;}
+ #select.game-ui #step-title {font-size:22px;}
+ #select.game-ui #back-title {display:none;}
+ #select.game-ui #course-panel {grid-template-rows:minmax(290px,1fr) 37px 107px;gap:5px;overflow-y:auto;}
+ .course-feature {display:grid;grid-template-columns:1fr;grid-template-rows:clamp(130px,23vh,200px) auto;gap:12px;}
+ .course-feature-map {grid-row:1;}
+ #select.game-ui #course-detail {padding:0;overflow:visible;}
+ #select.game-ui #course-detail h2 {font-size:25px;margin:9px 0 8px;}
+ #select.game-ui #course-detail .feature-subtitle {font-size:11px;line-height:1.5;}
+ #course-detail .feature-kicker {font-size:9px;}
+ .feature-stats {gap:24px;margin:12px 0;}.feature-stats small {font-size:8px;}.feature-stats>div {gap:4px;}
+ #select.game-ui .feature-stats strong {font-size:15px;}
+ .feature-tags {gap:4px;}.feature-tags span {font-size:9px;padding:4px 6px;}
+ #select.game-ui .course-carousel {grid-template-columns:minmax(0,1fr);}
+ #select.game-ui .course-carousel>button {display:none;}
+ #select.game-ui .course-card {flex-basis:169px;height:94px;}
+ #select.game-ui .course-card-body {padding:11px 12px;}
+ #select.game-ui .course-card h2 {font-size:17px;}
+ #select.game-ui .course-filters {gap:6px;}
+ #select.game-ui .course-filters button {font-size:10px;min-height:30px;padding:5px 12px;}
+ #select.game-ui .wizard-controls {padding:10px 0;gap:12px;}
+ #select.game-ui #step-selection {display:none;}
+ #select.game-ui :is(#step-next,#start) {flex:1;width:auto;max-width:230px;}
+ #select.game-ui .vehicle-section {grid-template-rows:minmax(230px,1fr) 95px;gap:8px;overflow-y:auto;}
+ .garage-info {padding:5px 0;max-width:260px;}.garage-info h2 {font-size:40px;margin:10px 0;letter-spacing:-2px;}
+ .garage-info p {font-size:11px;max-width:240px;line-height:1.5;margin:0;}
+ #garage-specs {margin:14px 0;gap:21px;}#garage-specs dd {font-size:14px;margin-top:5px;}
+ .garage-view {top:auto;bottom:8px;right:0;}.garage-view button {padding:7px 12px;font-size:10px;}
+ #select.game-ui .vehicles {gap:8px;}
+ #select.game-ui .vehicle-card {padding:12px;gap:0;}.vehicle-number {display:none;}.vehicle-choice>small {font-size:8px;letter-spacing:0;}
+ #select.game-ui .vehicle-card strong {font-size:19px;}.vehicle-choice>span {font-size:9px;}.selection-mark {font-size:17px;}
+ #select.game-ui .difficulties {grid-template-columns:1fr;gap:10px;}
+ #select.game-ui .difficulty-card {padding:14px 16px 14px 37%;min-height:115px;}
+ #select.game-ui .difficulty-card>strong {font-size:22px;margin:8px 0;}.traffic-count {margin-top:12px;font-size:12px;}
+ #select.game-ui .difficulty-card .traffic-visual {position:absolute;left:0;top:7px;width:27%;height:90px;margin:6px;}
+ #select.game-ui .difficulty-card p {font-size:11px;margin:0 0 6px;}
+ #select.game-ui .difficulty-card>span {font-size:9px;}.traffic-level {font-size:8px;}
+ #select.game-ui #difficulty-panel {justify-content:flex-start;gap:12px;}
+ .traffic-note {font-size:10px;}
+ #select.game-ui #toll-options {padding:7px 12px;}#select.game-ui #toll-options label {font-size:10px;padding:5px 0;}
+ #select.game-ui .trip-panel {grid-template-columns:1fr;height:auto;min-height:100%;}
+ #select.game-ui #overview {height:160px;}
+ #select.game-ui .trip-details {padding:19px;overflow:visible;}
+ #select.game-ui #review-course-title {font-size:25px;}
+ #select.game-ui .review-course-meta {margin-bottom:16px;font-size:10px;}
+ #select.game-ui .trip-details strong {font-size:14px;}
+ #select.game-ui .drive-summary {margin:14px 0;padding:12px 0;font-size:11px;}
+}
+@media(max-height:500px) and (orientation:landscape){
+ :root {--menu-edge:22px;}
+ body.on-title .title-logo {top:18%;left:5vw;width:40vw;max-width:none;}
+ body.on-title .title-logo h1 {font-size:clamp(55px,11vw,90px);margin:18px 0;}
+ body.on-title .title-eyebrow {font-size:7px;letter-spacing:1.5px;}
+ body.on-title .title-tagline {font-size:11px;}
+ body.on-title .title-menu {left:auto;right:5vw;top:auto;bottom:19%;width:42vw;max-height:65vh;overflow-y:auto;}
+ body.on-title .title-menu .menu-item {font-size:15px;min-height:40px;padding:8px 12px;}
+ body.on-title .title-menu .secondary {font-size:9px;min-height:32px;padding:5px 0;}
+ body.on-title .menu-hint {display:none;}
+ body.on-title .press-start {left:auto;right:5vw;width:40vw;bottom:32%;top:auto;}
+ body.on-title .press-start>span {font-size:16px;}.press-start small {font-size:9px;}
+ body.on-title .stage-card,body.on-title .title-keys {display:none;}
+ body.on-title .title-lang {top:10px;right:22px;}.title-footer {height:32px;}
+ #select.game-ui {grid-template-rows:44px 40px minmax(0,1fr) 56px;padding-inline:22px;}
+ .menu-wordmark {font-size:14px;}.menu-wordmark>span {font-size:6px;letter-spacing:2px;margin-top:4px;}
+ #setup-help {font-size:9px;padding:4px;margin-right:92px;}#setup-help kbd {display:none;}
+ #select.game-ui .step-progress,#select.game-ui[data-step="1"] .step-progress {top:6px;width:370px;max-width:58%;}
+ #select.game-ui .step-progress button {min-height:30px;font-size:9px;padding:4px 2px;}
+ #select.game-ui .step-progress .step-number {width:17px;height:17px;flex-basis:17px;font-size:8px;}
+ #select.game-ui .intro,#select.game-ui[data-step="1"] .intro {padding:6px 0;gap:10px;}
+ #select.game-ui #step-title {font-size:20px;}#select.game-ui #step-caption {font-size:8px;letter-spacing:0;}
+ #select.game-ui #course-panel {grid-template-rows:minmax(0,1fr) 29px 78px;gap:3px;padding-bottom:5px;}
+ .course-feature {gap:16px;grid-template-columns:1fr 1fr;}
+ #select.game-ui #course-detail {padding:0;justify-content:flex-start;}
+ #course-detail .feature-kicker {font-size:8px;}
+ #select.game-ui #course-detail h2 {font-size:22px;margin:5px 0;}
+ #select.game-ui #course-detail .feature-subtitle {display:none;}
+ .feature-stats {gap:19px;margin:6px 0;}.feature-stats small {font-size:7px;}.feature-stats>div {gap:2px;}
+ #select.game-ui .feature-stats strong {font-size:13px;}.feature-tags {gap:3px;}.feature-tags span {font-size:8px;padding:2px 5px;}
+ .course-feature-map {border-radius:6px;}.course-feature-map figcaption {left:12px;right:12px;bottom:6px;font-size:7px;}
+ #select.game-ui .course-filters {gap:6px;}#select.game-ui .course-filters button {min-height:24px;padding:3px 10px;font-size:9px;}
+ #select.game-ui .course-carousel {gap:7px;grid-template-columns:24px minmax(0,1fr) 24px;}
+ #select.game-ui .course-carousel>button {display:block;width:24px;height:32px;font-size:22px;}
+ #select.game-ui #course-cards {gap:8px;padding:2px;}
+ #select.game-ui .course-card {flex-basis:157px;height:70px;border-radius:5px;}
+ #select.game-ui .course-card-body {padding:7px 10px;}#select.game-ui .course-region {font-size:7px;}
+ #select.game-ui .course-card h2 {font-size:15px;margin:5px 0 6px;}.course-meta {font-size:9px;}
+ #select.game-ui .course-stars {font-size:8px;}
+ #select.game-ui .wizard-controls {padding:6px 0;gap:12px;}#select.game-ui .wizard-controls button {min-height:40px;font-size:11px;padding:8px 18px;}
+ #select.game-ui #step-selection {font-size:9px;}#select.game-ui :is(#step-next,#start) {width:170px;}
+ #select.game-ui .vehicle-section {grid-template-rows:minmax(0,1fr) 65px;gap:4px;padding-bottom:6px;}
+ .garage-info {padding:4px 0;max-width:245px;}.garage-info>small {font-size:8px;}.garage-info h2 {font-size:32px;margin:9px 0;letter-spacing:-1px;}
+ .garage-info p {font-size:10px;margin:0;line-height:1.5;}#garage-specs {margin:10px 0;gap:20px;}#garage-specs dt {font-size:8px;}#garage-specs dd {font-size:12px;margin:4px 0;}
+ .garage-view button {font-size:9px;padding:6px 12px;}
+ #select.game-ui .vehicles {max-width:580px;gap:10px;}#select.game-ui .vehicle-card {padding:9px 15px;gap:12px;}
+ #select.game-ui .vehicle-card strong {font-size:17px;}.vehicle-choice {gap:3px;}.vehicle-choice>small {font-size:8px;}.vehicle-choice>span {font-size:9px;}
+ #select.game-ui #difficulty-panel {justify-content:flex-start;gap:8px;}.difficulties {gap:10px!important;}
+ #select.game-ui .difficulty-card {padding:10px 14px;line-height:1.3;}.traffic-level {font-size:8px;}
+ #select.game-ui .traffic-visual {height:32px;margin:6px;}
+ #select.game-ui .traffic-visual i {height:6px;width:5px;left:calc(16.67% + var(--lane)*33.33% - 2px);top:calc(var(--row)*6px);box-shadow:inset 0 2px #3f535e;border-radius:2px;transform:none;}
+ #select.game-ui .difficulty-card>strong {font-size:21px;margin:7px 0;}.traffic-count {margin-top:12px;font-size:12px;}
+ #select.game-ui .difficulty-card p {font-size:10px;margin:0 0 5px;}#select.game-ui .difficulty-card>span {display:none;}
+ .traffic-note {font-size:9px;}#select.game-ui #toll-options {padding:5px 10px;}#select.game-ui #toll-options label {font-size:9px;padding:2px 15px 2px 0;}
+ #select.game-ui #toll-options legend {font-size:10px;}
+ #select.game-ui .trip-details {padding:16px 20px;}#select.game-ui #review-course-title {font-size:23px;}
+ #select.game-ui .review-course-meta {font-size:9px;margin-bottom:10px;}#select.game-ui .trip-details strong {font-size:12px;margin:3px 0;}
+ #select.game-ui .trip-details label {font-size:8px;}#select.game-ui .trip-line {margin:7px 0;}#select.game-ui .trip-line span {font-size:9px;}
+ #select.game-ui .drive-summary {margin:10px 0;padding:8px 0;font-size:10px;}#select.game-ui #trip-status {font-size:9px;}
+ #select.game-ui .trip-details>.fine {font-size:9px;}
+}
+@media(max-width:650px) and (orientation:landscape){
+ #select.game-ui #setup-help {display:none;}
+ #select.game-ui #course-panel {grid-template-rows:minmax(0,1fr) 28px 64px;}
+ #select.game-ui #course-detail h2 {font-size:18px;margin:3px 0;}
+ #select.game-ui .feature-stats {margin:4px 0;gap:16px;}
+ #select.game-ui .course-card {height:58px;}
+ #select.game-ui .course-card h2 {font-size:13px;margin:3px 0 4px;}
+ #select.game-ui .course-card-body {padding:5px 9px;}
+ #select.game-ui .garage-info p {display:none;}
+ #select.game-ui .garage-info h2 {font-size:29px;margin:7px 0;}
+ #select.game-ui #garage-specs {margin:7px 0;}
+}
+body.on-title:is([data-drive-layout="portrait"],[data-drive-layout="landscape"]) .title-lang {right:112px;}
+@media(min-width:601px) and (orientation:portrait){
+ body.in-menu[data-drive-layout="portrait"] #setup-help {position:absolute;right:125px;top:83px;margin:0;padding:8px;}
+}
+body.in-menu #select.game-ui {padding-top:var(--safe-top);padding-bottom:var(--safe-bottom);padding-left:max(var(--menu-edge),var(--safe-left));padding-right:max(var(--menu-edge),var(--safe-right));}
+@media(prefers-reduced-motion:reduce){#splash *,#select.game-ui *{animation:none!important;transition:none!important;scroll-behavior:auto!important;}}

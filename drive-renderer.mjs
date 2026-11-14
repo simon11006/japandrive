@@ -20,6 +20,7 @@ import { drawNavOverlay } from "./nav-display.mjs";
 import { navigationScale } from './navigation.mjs';
 import {StreetEncounters,pedestrianGreen} from './street-encounters.mjs';
 import {PeopleModels} from './people-model.mjs';
+import {MenuStage} from './menu-stage.mjs';
 import { driverEye, verticalFov, viewSettings, lookIntoTurn, GLANCE } from "./driver-view.mjs";
 import { steeringLimit } from "./vehicles.mjs";
 import {
@@ -1341,23 +1342,24 @@ export class DriveRenderer {
     if (state.tolls) updateTollObjects(this,state.tolls);
     this.syncTraffic(state.traffic || [], state.time);
     this.peopleModels?.update(this.encounters?[...this.encounters.people,...this.encounters.officers]:[],this,state.time,state.position);
+    if(state.intro&&(state.menuStep===0||(state.menuStep===2&&state.garageView!=='interior'))){
+      this.menuStage??=new MenuStage(this.scene.environment);
+      this.menuStage.render(this.renderer,this.car,state.time,w,h);return;
+    }
+    if(state.intro&&state.menuStep===2&&state.garageView==='interior')
+      state={...state,intro:false,speed:0,gear:1,steer:0,parkingBrake:true};
     if (state.intro) {
       this.interior.visible = false;
       this.externalCar.visible = true;
       this.externalCar.position.copy(this.local(state.position));
       this.externalCar.rotation.y = -state.heading;
-      // Slow, low cinematic orbit; the car sits in the right third of the
-      // frame so the title menu has the left side.
-      const t = state.time,
-        angle = 0.9 + t * 0.04,
-        radius = 12.5 + Math.sin(t * 0.09) * 2,
-        lift = 1.25 + (Math.sin(t * 0.06) + 1) * 0.6,
-        center = this.local(state.position, 0.9),
-        eye = center.clone().add(new THREE.Vector3(Math.cos(angle) * radius, lift, Math.sin(angle) * radius)),
-        toCar = center.clone().sub(eye).setY(0).normalize(),
-        right = new THREE.Vector3(-toCar.z, 0, toCar.x);
+      // Keep the menu camera above the road; a free orbit cuts through dense
+      // city buildings and leaves a wall behind the course picker.
+      const center = this.local(state.position, 0.9),
+        ahead = new THREE.Vector3(Math.sin(state.heading),0,-Math.cos(state.heading)),
+        eye = center.clone().addScaledVector(ahead,-9).add(new THREE.Vector3(0,5,0));
       this.introCamera.position.copy(eye);
-      this.introCamera.lookAt(center.clone().addScaledVector(right, -2.2).add(new THREE.Vector3(0, 0.35, 0)));
+      this.introCamera.lookAt(center.clone().addScaledVector(ahead,26));
       this.sun.target.position.copy(center);
       this.sun.position.copy(center).addScaledVector(SUN_DIRECTION, 220);
       this.sky.position.copy(center);

@@ -213,18 +213,8 @@ function renderVehicles() {
       const button = document.createElement("button");
       button.className = `vehicle-card${v.id === car.id ? " selected" : ""}`;
       button.setAttribute("aria-pressed", String(v.id === car.id));
-      const silhouette =
-        v.id === "prius"
-          ? "M8 39 L18 28 L46 13 L77 15 L101 33 L112 38 L112 51 L7 51 Z"
-          : "M8 32 L27 12 L99 12 L111 25 L113 51 L7 51 Z";
-      button.innerHTML = `<svg viewBox="0 0 120 65" aria-hidden="true"><path d="${silhouette}" fill="#d1dbd8" stroke="#c8eece" stroke-width="1.5"/><path d="${v.id === "prius" ? "M23 28 L47 17 L75 19 L91 30 Z" : "M30 16 L96 16 L104 29 L20 29 Z"}" fill="#35525b"/><circle cx="29" cy="49" r="9" fill="#0d1922"/><circle cx="93" cy="49" r="9" fill="#0d1922"/><circle cx="29" cy="49" r="4" fill="#6a8188"/><circle cx="93" cy="49" r="4" fill="#6a8188"/></svg><div><strong>${v.name}</strong><small>${v.trim}</small><span class="specs">전장 ${(v.length * 1000).toFixed(0)} · 전폭 ${(v.width * 1000).toFixed(0)} mm<br>축거 ${(v.wheelbase * 1000).toFixed(0)} mm · 최소 회전 반경 ${v.turningRadius.toFixed(1)} m</span><div class="stat-bars">${[
-        ["차체 길이", v.length / 5.2, `${v.length.toFixed(2)} m`],
-        ["차폭", v.width / 2.0, `${v.width.toFixed(2)} m`],
-        ["차 높이", v.height / 2.0, `${v.height.toFixed(2)} m`],
-        ["최소 회전 반경", v.turningRadius / 6.5, `${v.turningRadius.toFixed(1)} m`],
-      ]
-        .map(([n, f, t]) => `<div><span>${n}</span><i><b style="width:${Math.round(f * 100)}%"></b></i><span>${t}</span></div>`)
-        .join("")}</div></div>`;
+      button.dataset.car=v.id;
+      button.innerHTML=`<span class="vehicle-number">${v.id==='prius'?'01':'02'}</span><span class="vehicle-choice"><small>TOYOTA ${v.english}</small><strong>${v.name.replace('토요타 ','')}</strong><span>${v.id==='prius'?'낮은 시점 · 가벼운 차체':'높은 시점 · 넓은 차체'}</span></span><span class="selection-mark" aria-hidden="true">${v.id===car.id?'✓':'+'}</span>`;
       button.onclick = () => {
         car = v;
         renderVehicles();
@@ -766,27 +756,27 @@ async function loadCourses(){
   renderCourses();
   await chooseCourse(courses[0]);
   if(selectedCourse.id===courses[0].id&&courseBundle){
-    prepareCourseWorld();
     active=false;intro=true;speed=0;
     $('#loading').textContent='';
     $('#intro-status').textContent='';
   }
 }
+function visibleCourses(){return courses.filter(c=>courseFilter==='all'||(courseFilter==='city'&&['city','urban'].includes(c.theme))||(courseFilter==='nature'&&['coast','mountain'].includes(c.theme))||(courseFilter==='beginner'&&c.stars===1)||courseFilter===c.theme);}
 function renderCourses(){
-  const visible=courses.filter(c=>courseFilter==='all'||(courseFilter==='city'&&['city','urban'].includes(c.theme))||(courseFilter==='nature'&&['coast','mountain'].includes(c.theme))||(courseFilter==='beginner'&&c.stars===1)||courseFilter===c.theme);
-  $('#course-cards').replaceChildren(...visible.map((c,i)=>{
-    const button=document.createElement('button');button.className=`course-card theme-${c.theme}${selectedCourse?.id===c.id?' selected':''}`;button.dataset.course=c.id;button.setAttribute('aria-pressed',String(selectedCourse?.id===c.id));
+  const visible=visibleCourses();
+  $('#course-cards').replaceChildren(...visible.map(c=>{
+    const button=document.createElement('button');button.className='course-card';button.dataset.course=c.id;
+    button.setAttribute('aria-label',`${c.name} · ${c.region} · ${courseTime(c)} · 난이도 ${c.stars}`);
     const picture=document.createElement('div');picture.className='course-picture';
     const canvas=document.createElement('canvas');canvas.setAttribute('aria-hidden','true');picture.append(canvas);
-    const over=document.createElement('span');over.className='course-kicker';over.textContent=`${c.region} / ${c.category}`;picture.append(over);
-    const no=document.createElement('b');no.className='course-number';no.textContent=String(courses.indexOf(c)+1).padStart(2,'0');picture.append(no);
     const body=document.createElement('div');body.className='course-card-body';
-    const title=document.createElement('h2');title.textContent=c.name;const copy=document.createElement('p');copy.textContent=c.subtitle;
-    const meta=document.createElement('div');meta.className='course-meta';const time=document.createElement('strong');time.textContent=`${courseTime(c)}`;const rating=document.createElement('span');rating.className='course-stars';rating.textContent=stars(c);rating.setAttribute('aria-label',`난이도 5단계 중 ${c.stars}단계`);meta.append(time,rating);
-    const tags=document.createElement('div');tags.className='course-tags';for(const feature of c.features){const tag=document.createElement('span');tag.textContent=feature;tags.append(tag);}
-    const footer=document.createElement('small');footer.textContent=`${distanceText(c.distance)} · 주차 포함`;
-    body.append(meta,title,copy,tags,footer);button.append(picture,body);button.onclick=()=>chooseCourse(c);
-    requestAnimationFrame(()=>drawCourseMap(canvas,c,courseCache.get(c.id)));return button;
+    const region=document.createElement('small');region.className='course-region';region.textContent=`${String(courses.indexOf(c)+1).padStart(2,'0')} / ${c.region}`;
+    const title=document.createElement('h2');title.textContent=c.name.split(' · ')[0];
+    const meta=document.createElement('div');meta.className='course-meta';
+    const time=document.createElement('span');time.textContent=courseTime(c);
+    const rating=document.createElement('span');rating.className='course-stars';rating.textContent=stars(c);meta.append(time,rating);
+    body.append(region,title,meta);button.append(picture,body);button.onclick=()=>chooseCourse(c);
+    requestAnimationFrame(()=>drawCourseMap(canvas,c,courseCache.get(c.id),{compact:true}));return button;
   }));
   updateCourseSelection();
 }
@@ -794,11 +784,19 @@ function updateCourseSelection(){
   for(const button of $('#course-cards').children){
     const chosen=button.dataset.course===selectedCourse?.id;
     button.classList.toggle('selected',chosen);button.setAttribute('aria-pressed',String(chosen));
-    if(chosen&&courseBundle){const course=selectedCourse,bundle=courseBundle;requestAnimationFrame(()=>drawCourseMap(button.querySelector('canvas'),course,bundle));}
+    if(chosen&&courseBundle){const course=selectedCourse,bundle=courseBundle;requestAnimationFrame(()=>drawCourseMap(button.querySelector('canvas'),course,bundle,{compact:true}));}
   }
   const detail=$('#course-detail');detail.replaceChildren();if(!selectedCourse)return;
-  const text=document.createElement('div');const strong=document.createElement('strong');strong.textContent=`선택한 코스 · ${selectedCourse.name}`;const p=document.createElement('p');p.textContent=selectedCourse.assessment.join(' · ');text.append(strong,p);
-  const note=document.createElement('span');note.textContent=selectedCourse.reconstructed?'실제 E58 선형 참고 · 진입·출구를 연습용으로 구성':'실제 도로·건물 배치 참고 · 신호와 교통은 연습용';detail.append(text,note);
+  const c=selectedCourse,el=(tag,text,cls)=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
+  const kicker=el('small',`${c.region} / ${c.category}`,'feature-kicker'),title=el('h2',c.name),description=el('p',c.subtitle,'feature-subtitle');
+  const stats=el('div','','feature-stats');
+  for(const [label,value]of [['예상 시간',courseTime(c)],['코스 난이도',stars(c)],['주행 거리',distanceText(c.distance)]]){
+    const item=el('div');item.append(el('small',label),el('strong',value));stats.append(item);
+  }
+  const tags=el('div','','feature-tags');for(const feature of c.features)tags.append(el('span',feature));
+  detail.append(kicker,title,description,stats,tags);
+  requestAnimationFrame(()=>drawCourseMap($('#course-feature-map'),c,courseBundle,{presentation:true}));
+
 }
 async function chooseCourse(c){
   if(busy)cancelDrivePreparation();selectedCourse=c;courseBundle=null;updateCourseSelection();updateStart();
@@ -815,11 +813,26 @@ async function chooseCourse(c){
     departure={id:c.id+'-start',name:c.startLabel,lon:start[0],lat:start[1],resolved:true};
     selected={id:c.id+'-finish',name:c.finishLabel,lon:end[0],lat:end[1],resolved:true};
     $('#chosen').textContent=selected.name;$('#trip-status').className='muted';$('#trip-status').textContent='코스 준비 완료 · 신호를 지키며 목적지에 도착해 주차하세요.';$('#quick-test').hidden=true;
+    if(!active)prepareCourseWorld();
     $('#loading').textContent='';updateCourseSelection();updateStart();drawOverview();drawIntroMap();
   }catch(error){if(selectedCourse.id===c.id)$('#loading').textContent='코스를 불러오지 못했습니다. 카드를 눌러 다시 시도해 주세요.';}
 }
-for(const b of document.querySelectorAll('#course-filters button'))b.onclick=()=>{courseFilter=b.dataset.filter;for(const button of document.querySelectorAll('#course-filters button'))button.setAttribute('aria-pressed',String(button===b));renderCourses();};
-for(const [id,direction]of [['#course-prev',-1],['#course-next',1]])$(id).onclick=()=>$('#course-cards').scrollBy({left:direction*($('#course-cards').clientWidth*.8),behavior:'smooth'});
+for(const b of document.querySelectorAll('#course-filters button'))b.onclick=()=>{
+  courseFilter=b.dataset.filter;for(const button of document.querySelectorAll('#course-filters button'))button.setAttribute('aria-pressed',String(button===b));
+  renderCourses();if(!visibleCourses().some(c=>c.id===selectedCourse?.id)&&visibleCourses().length)chooseCourse(visibleCourses()[0]);
+};
+function moveCourse(direction){
+  const visible=visibleCourses(),index=visible.findIndex(c=>c.id===selectedCourse?.id);
+  const c=visible[(index+direction+visible.length)%visible.length];if(!c)return;
+  chooseCourse(c);document.querySelector(`[data-course="${c.id}"]`)?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+}
+for(const [id,direction]of [['#course-prev',-1],['#course-next',1]])$(id).onclick=()=>moveCourse(direction);
+$('#course-cards').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();moveCourse(e.key==='ArrowLeft'?-1:1);}});
+let garageView='exterior';
+for(const b of document.querySelectorAll('[data-garage-view]'))b.onclick=()=>{
+  garageView=b.dataset.garageView;document.body.dataset.garageView=garageView;
+  for(const button of document.querySelectorAll('[data-garage-view]'))button.setAttribute('aria-pressed',String(button===b));
+};
 function prepareCourseWorld(){
   // Courses already contain their scenery; keep long-drive streaming separate.
   buildings=null;
@@ -840,7 +853,8 @@ function prepareCourseWorld(){
     course:{theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
   driver?.setRoadRules(roadRules,store.roads);
   traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
-  traffic.pedestrianStop=vehicle=>driver?.encounters?.stopDistance(vehicle)??Infinity;
+  traffic.pedestrianStop=(vehicle,path)=>driver?.encounters?.stopDistance(vehicle,path)??Infinity;
+  traffic.pedestrianBlocked=(before,after)=>driver?.encounters?.blocksMovement(before,after)??false;
 }
 async function startCourse(){
   if(!courseBundle||busy)return;
@@ -860,10 +874,10 @@ async function startCourse(){
 $('#toll-action').onclick=()=>{tollAction=true;};
 window.addEventListener('keydown',e=>{if(e.key==='Enter'&&active&&!paused&&!done&&!$('#toll-prompt').hidden){e.preventDefault();tollAction=true;}});
 const wizardTitles = [
-  "오늘의 드라이브를 고르세요.",
-  "함께 달릴 차량은?",
-  "교통량을 맞춰 보세요.",
-  "이제 출발할 준비가 됐어요.",
+  "코스 선택",
+  "차량 선택",
+  "교통량 선택",
+  "출발 준비",
 ];
 const wizardDescriptions = [
   "별점과 예상 시간, 코스의 특징을 확인하세요. 도착 후 주차까지 이어집니다.",
@@ -877,6 +891,7 @@ function showWizardStep(step, focus = true) {
   $("#select").dataset.step = wizardStep;
   $("#regions").hidden = true;
   $("#course-panel").hidden = wizardStep !== 1;
+  $("#start").hidden = wizardStep !== 4;
   $(".vehicle-section").hidden = wizardStep !== 2;
   $("#planner").hidden = wizardStep !== 4;
   $(".places-panel").hidden = true;
@@ -915,6 +930,7 @@ function showWizardStep(step, focus = true) {
     }),
   );
   if (wizardStep === 3) renderDifficulties();
+  document.body.dataset.garageView=garageView;
   updateWizard();
   drawOverview();
   if (focus) {
@@ -937,6 +953,9 @@ function updateWizard() {
   $("#step-next").textContent = `${wizardLabels[wizardStep] || "출발"} →`;
   $("#step-next").disabled =
     !regionReady || busy || !selectedCourse || !courseBundle;
+  $('#garage-name').textContent=car.english;
+  $('#garage-description').textContent=car.id==='prius'?'낮은 운전 자세, 중앙 계기판. 골목에서 차폭 감각을 익히세요.':'높은 운전 자세, 넉넉한 실내. 큰 차체와 회전 반경을 익히세요.';
+  $('#garage-specs').innerHTML=[['차폭',car.width.toFixed(2)+' m'],['회전 반경',car.turningRadius.toFixed(1)+' m'],['시점',car.id==='prius'?'승용차':'승합차']].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
   $("#departure-name").textContent = departure?.name || "출발지를 선택하세요";
   $("#drive-summary").textContent = `${car.name} · ${difficulty.name} · ${difficulty.description}`;
   $("#review-course-title").textContent=selectedCourse?.name||'';
@@ -986,9 +1005,11 @@ function renderDifficulties() {
       b.setAttribute("aria-pressed", String(difficulty.id === d.id));
       const visual = document.createElement("div");
       visual.className = "traffic-visual";
-      for (let i = 0; i < [3, 10, 25][index]; i++) {
+      for (let i = 0; i < [3, 9, 15][index]; i++) {
         const dot = document.createElement("i");
         dot.style.setProperty("--i", i);
+        dot.style.setProperty("--lane", i % 3);
+        dot.style.setProperty("--row", Math.floor(i / 3));
         visual.append(dot);
       }
       const title = document.createElement("strong");
@@ -997,7 +1018,9 @@ function renderDifficulties() {
       description.textContent = d.description;
       const help = document.createElement("span");
       help.textContent = ["처음이라면 천천히", "차간 간격과 신호 확인", "혼잡한 도심 주행 연습"][index];
-      b.append(visual, title, description, help);
+      const level=document.createElement('small');level.className='traffic-level';level.textContent=`TRAFFIC ${String(index+1).padStart(2,'0')}`;
+      const count=document.createElement('b');count.className='traffic-count';count.textContent=`${d.cars}대`;
+      b.append(level,visual,title,count,description,help);
       b.onclick = () => {
         difficulty = d;
         try {
@@ -2208,7 +2231,7 @@ function openManual() {
   $("#pause-menu").hidden = true;
   $("#help").hidden = false;
 }
-for (const id of ["#help-open", "#splash-help", "#pause-manual"]) $(id).onclick = openManual;
+for (const id of ["#help-open", "#splash-help", "#pause-manual", "#setup-help"]) $(id).onclick = openManual;
 $("#help-close").onclick = () => {
   $("#help").hidden = true;
   if (active) {
@@ -2560,6 +2583,8 @@ function frameBody(t) {
     traffic?.tick(dt, simulationTime, { x: 1e9, y: 1e9, heading: 0, speed: 0 });
     driver.render({
       intro: true,
+      menuStep:$('#select').hidden?0:wizardStep,garageView,
+      speed:0,gear:1,steer:0,dt,navInfo,drawNavigation:drawMap,
       position: pos,
       heading,
       time: simulationTime,
@@ -2575,3 +2600,5 @@ renderRegions();
 renderVehicles();
 loadCourses().catch(error=>{$('#loading').textContent='코스 자료를 불러오지 못했습니다. '+error.message;});
 requestAnimationFrame(frame);
+
+new ResizeObserver(()=>{if(selectedCourse)drawCourseMap($('#course-feature-map'),selectedCourse,courseBundle,{presentation:true});}).observe($('#course-feature-map'));

@@ -54,19 +54,21 @@ export class TollSession{
  return {message,blocked,violation,complete:this.gates.every(g=>g.state==='passed')};}
  get complete(){return this.gates.every(g=>g.state==='passed');}
 }
-export function drawCourseMap(canvas,course,bundle){
+export function drawCourseMap(canvas,course,bundle,{compact=false,presentation=false}={}){
  const dpr=Math.min(globalThis.devicePixelRatio||1,2),w=canvas.clientWidth||640,h=canvas.clientHeight||300;
  canvas.width=w*dpr;canvas.height=h*dpr;const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
- c.fillStyle='#102a31';c.fillRect(0,0,w,h);if(!course?.preview?.length)return;
+ c.fillStyle=compact||presentation?'#101b29':'#102a31';c.fillRect(0,0,w,h);if(!course?.preview?.length)return;
  const cosine=Math.cos((course.origin?.[1]??course.preview[0][1])*Math.PI/180),pts=course.preview.map(([lon,lat])=>({x:lon*cosine,y:-lat}));
  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;
- const scale=Math.min((w-100)/(Math.max(...xs)-Math.min(...xs)||.001),(h-100)/(Math.max(...ys)-Math.min(...ys)||.001));
+ const pad=Math.min(compact?34:100,w*.3,h*.3);
+ const scale=Math.min((w-pad)/(Math.max(...xs)-Math.min(...xs)||.001),(h-pad)/(Math.max(...ys)-Math.min(...ys)||.001));
  const local=([lon,lat])=>({x:w/2+(lon*cosine-cx)*scale,y:h/2+(-lat-cy)*scale});
  if(bundle)for(const e of [...bundle.scene.elements.filter(e=>e.tags?.building),...bundle.roads.elements]){
   if(!e.geometry)continue;c.beginPath();e.geometry.forEach((p,i)=>{const q=local([p.lon,p.lat]);i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y);});
-  if(e.tags.building){c.fillStyle='#27454a';c.fill();}else{c.strokeStyle='#3b5d61';c.lineWidth=2;c.stroke();}
+  if(e.tags.building){c.fillStyle=presentation?'#253342':'#27454a';c.fill();}else{c.strokeStyle=presentation?'#46505e':'#3b5d61';c.lineWidth=2;c.stroke();}
  }
- const route=bundle?.route.geometry.coordinates||course.preview;c.beginPath();route.forEach((p,i)=>{const q=local(p);i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y);});c.strokeStyle='#b9efd7';c.lineWidth=4;c.lineJoin='round';c.stroke();
- for(const [p,label,color]of [[route[0],'START','#b9efd7'],[route.at(-1),'P','#ffd79b']]){const q=local(p);c.beginPath();c.arc(q.x,q.y,8,0,Math.PI*2);c.fillStyle=color;c.fill();c.font='bold 12px sans-serif';c.fillText(label,q.x+14,q.y+4);}
- c.fillStyle='#a7c0c2';c.font='11px sans-serif';c.fillText('N ↑  ·  OSM 도로 기반',18,24);
+ const route=bundle?.route.geometry.coordinates||course.preview;c.beginPath();route.forEach((p,i)=>{const q=local(p);i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y);});c.strokeStyle=compact||presentation?'#d6f57c':'#b9efd7';c.lineWidth=compact?2.5:4;c.lineJoin='round';
+ if(presentation){c.shadowColor='#d6f57c';c.shadowBlur=12;}c.stroke();c.shadowBlur=0;
+ for(const [p,label,color]of [[route[0],'START','#b9efd7'],[route.at(-1),'P','#ffd79b']]){const q=local(p);c.beginPath();c.arc(q.x,q.y,compact?4:8,0,Math.PI*2);c.fillStyle=color;c.fill();c.font='bold 12px sans-serif';if(!compact)c.fillText(label,q.x+14,q.y+4);}
+ if(!compact){c.fillStyle='#a7c0c2';c.font='11px sans-serif';c.fillText(presentation?'N ↑':'N ↑  ·  OSM 도로 기반',18,24);}
 }

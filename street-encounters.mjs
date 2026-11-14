@@ -71,6 +71,7 @@ export class StreetEncounters {
   }
   place(){for(const p of this.people)Object.assign(p,pointAt(p.crossing,p.side*(p.crossing.width/2+.8)*(1-p.progress*2)));}
   tick(dt,time,player,traffic=[]){
+    this.time=time;
     for(const p of this.people){
       if(p.state==='done')continue;
       const c=p.crossing;
@@ -97,13 +98,44 @@ export class StreetEncounters {
     }
     this.place();
   }
-  priority(c){return this.people.some(p=>p.crossing===c&&(p.state==='walking'||(!c.signal&&p.active&&p.state==='waiting')));}
+  priority(c){return this.people.some(p=>p.crossing===c&&(p.state==='walking'||
+    (p.active&&p.state==='waiting'&&canStartCrossing(c,this.time??0,p.speed))));}
   approaching(vehicle,max=45){
     const f=forward(vehicle.heading);
     return this.crossings.map(c=>({crossing:c,ahead:(c.x-vehicle.x)*f.x+(c.y-vehicle.y)*f.y,lateral:Math.abs((c.x-vehicle.x)*f.y-(c.y-vehicle.y)*f.x)}))
       .filter(x=>this.priority(x.crossing)&&Math.abs(Math.cos(vehicle.heading-x.crossing.heading))>.6&&x.ahead>-(vehicle.length||4.6)/2&&x.ahead<max&&x.lateral<x.crossing.width/2+.5).sort((a,b)=>a.ahead-b.ahead)[0];
   }
-  stopDistance(vehicle){const a=this.approaching(vehicle);return a?Math.max(0,a.ahead-(vehicle.length||4.6)/2-2.7):Infinity;}
+  stopDistance(vehicle,path){
+    if(!path){const f=forward(vehicle.heading);path=[vehicle,{x:vehicle.x+f.x*45,y:vehicle.y+f.y*45}];}
+    let best=Infinity,travelled=0;
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],length=distance(a,b);if(length<.001)continue;
+      for(const c of this.crossings){
+        if(!this.priority(c))continue;
+        const f=forward(c.heading),r={x:Math.cos(c.heading),y:Math.sin(c.heading)},
+          from=(a.x-c.x)*f.x+(a.y-c.y)*f.y,to=(b.x-c.x)*f.x+(b.y-c.y)*f.y;
+        if(Math.abs(to-from)<length*.55)continue;
+        const t=from/(from-to);if(t<0||t>1)continue;
+        const x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t;
+        if(Math.abs((x-c.x)*r.x+(y-c.y)*r.y)>c.width/2+.4)continue;
+        const ahead=travelled+length*t,front=ahead-(vehicle.length||4.6)/2;
+        // A vehicle already occupying the crossing must be allowed to clear;
+        // waiting people will not step into it. New approaches stop upstream.
+        if(front<1.45&&!this.people.some(p=>p.crossing===c&&p.state==='walking'))continue;
+        best=Math.min(best,Math.max(0,front-2.7));
+      }
+      travelled+=length;
+    }
+    return best;
+  }
+  blocksMovement(before,after){
+    if(this.blocks(after)&&!this.blocks({...after,...before}))return true;
+    const move=distance(before,after);if(move<.001)return false;
+    const f=forward(after.heading),extent=after.length/2+3;
+    const path=[before,after,{x:after.x+f.x*extent,y:after.y+f.y*extent}];
+    const available=this.stopDistance({...after,...before},path);
+    return Number.isFinite(available)&&move>available+.02;
+  }
   blocks(vehicle){
     const f=forward(vehicle.heading);
     return this.people.find(p=>p.state==='walking'&&Math.abs((p.x-vehicle.x)*f.x+(p.y-vehicle.y)*f.y)<vehicle.length/2+.35&&Math.abs((p.x-vehicle.x)*f.y-(p.y-vehicle.y)*f.x)<vehicle.width/2+.35);

@@ -10,6 +10,68 @@ import {sceneFeatures} from '../scene-features.mjs';
 import {courseRoadStore} from '../courses.mjs';
 const roads=[{id:'road',tags:{highway:'residential',width:'7'},points:[{x:0,y:200},{x:0,y:-200}]}];
 const options={roads,route:roads[0].points,theme:'village',signals:[],nodes:[{id:'cross',tags:{highway:'crossing'},x:0,y:0}]};
+
+function turningEncounter(side){
+ const roads=[{id:'ns',tags:{width:'7'},points:[{x:0,y:150},{x:0,y:0},{x:0,y:-150}]},
+  {id:'ew',tags:{width:'7'},points:[{x:-150,y:0},{x:0,y:0},{x:150,y:0}]}];
+ const signals=prepareSignalLayouts([{id:'walk-turn',x:0,y:0,profile:'standard'}],roads);
+ const e=new StreetEncounters({roads,signals,route:[{x:0,y:150},{x:0,y:0},{x:side*150,y:0}],theme:'city'});
+ const c=e.crossings.find(c=>c.signal&&c.x*side>4&&Math.abs(c.y)<1);
+ assert.ok(c);e.crossings=[c];e.people=e.people.filter(p=>p.crossing===c);
+ const sim=new TrafficSimulation(roads,signals,{x:0,y:70},2),car=sim.cars[0];
+ car.edge=sim.graph.edges.find(e=>e.from.y===150&&e.to.y===0);car.along=car.edge.length-25;car.speed=5;sim.place(car);
+ const exit=car.edge.to.out.find(e=>e.to.x===side*150);car.next=exit;sim.cars=[car];
+ sim.pedestrianStop=(v,path)=>e.stopDistance(v,path);sim.pedestrianBlocked=(a,b)=>e.blocksMovement?.(a,b)||false;
+ const player={x:-20,y:40,heading:0,speed:0,length:4.6,width:1.8};
+ let time=0;while(time<100&&!canStartCrossing(c,time))time+=.05;
+ return {e,c,sim,car,exit,player,time};
+}
+
+test('left and right turning traffic waits before the exit crosswalk until the last pedestrian clears',()=>{
+ for(const side of [-1,1]){
+  const {e,c,sim,car,exit,player,time}=turningEncounter(side);let waited=false,resumed=false;
+  e.people[1].delay=2;
+  for(let i=0;i<600;i++){
+   const now=time+i*.05;e.tick(.05,now,player,sim.cars);sim.tick(.05,now,player);
+   if(e.priority(c)&&car.edge===exit){
+    const front=(c.x-car.x)*side-car.length/2;
+    assert.ok(front>=2.6,`${side<0?'left':'right'} turn entered crossing with people present: ${front}`);
+    if(car.speed<.1){waited=true;assert.ok(car.braking);}
+   }
+   assert.equal(!!e.blocks(car),false,'turning body never overlaps a walking pedestrian');
+   if(e.people.every(p=>p.state==='done')&&car.edge===exit&&(car.x-c.x)*side>10&&car.speed>1)resumed=true;
+  }
+  assert.ok(waited,'turning car visibly waits');assert.ok(resumed,'car resumes after all pedestrians clear');
+ }
+});
+
+test('a signal-controlled pedestrian waits on red and starts only on its own green',()=>{
+ const {e,c,player}=turningEncounter(1);let red=0;while(pedestrianGreen(c,red))red+=.1;
+ e.tick(.1,red,player,[]);assert.ok(e.people.every(p=>p.state==='waiting'));
+ let green=red;while(!canStartCrossing(c,green))green+=.1;
+ e.tick(.1,green,player,[]);assert.ok(e.people.some(p=>p.state==='walking'));
+});
+
+test('turning cars still yield to a person finishing after the pedestrian signal changes to red',()=>{
+ for(const side of [-1,1]){
+  const {e,c,sim,car,exit,player}=turningEncounter(side);
+  let red=0;while(pedestrianGreen(c,red))red+=.1;
+  car.edge=exit;car.along=0;car.speed=3;car.next=null;sim.place(car);
+  e.people[0].state='walking';e.people[0].progress=.45;e.people[0].active=true;
+  e.people[1].state='done';e.place();
+  let held=false;
+  for(let i=0;i<100;i++){
+   e.tick(.1,red,player,sim.cars);sim.tick(.1,red,player);
+   if(e.people[0].state==='walking'){
+    assert.ok(e.priority(c));
+    assert.ok((c.x-car.x)*side-car.length/2>=2.6);
+    if(car.speed<.1)held=true;
+   }
+  }
+  assert.ok(held);assert.equal(e.people[0].state,'done');
+  assert.ok((car.x-c.x)*side>10,'vehicle resumes once the crossing is empty');
+ }
+});
 test('pedestrians activate nearby, cross on the markings, and finish on the opposite pavement',()=>{
  const e=new StreetEncounters(options),player={x:-1.6,y:10,heading:0,length:4.6,width:1.8,speed:0};
  assert.equal(e.crossings.length,1);assert.equal(e.officers.length,1);assert.ok(roadClearance(e.officers[0],roads)>.5);

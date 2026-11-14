@@ -275,13 +275,23 @@ export class TrafficSimulation {
     this.graph = fresh.graph;
     this.origin = { ...start };
   }
-  place(car) {
-    const e = car.edge,
-      t = car.along / e.length,
+  lanePosition(car,e,along) {
+    const t = along / e.length,
       offset = e.oneway ? (e.lanes>1 ? e.width/2-e.width/e.lanes*((hash(car.id)%e.lanes)+.5) : .15) : Math.min(1.65, e.width * 0.23);
-    car.x = e.from.x + (e.to.x - e.from.x) * t - Math.cos(e.heading) * offset;
-    car.y = e.from.y + (e.to.y - e.from.y) * t - Math.sin(e.heading) * offset;
-    car.heading = e.heading;
+    return {x:e.from.x+(e.to.x-e.from.x)*t-Math.cos(e.heading)*offset,
+      y:e.from.y+(e.to.y-e.from.y)*t-Math.sin(e.heading)*offset,heading:e.heading};
+  }
+  place(car) {Object.assign(car,this.lanePosition(car,car.edge,car.along));}
+  previewPath(car,range=45){
+    const path=[{x:car.x,y:car.y}];let edge=car.edge,along=car.along,next=car.next,left=range;
+    const add=p=>{left-=distance(path.at(-1),p);path.push(p);};
+    for(let i=0;i<12&&left>0;i++){
+      const remaining=Math.max(0,edge.length-along),travel=Math.min(left,remaining);
+      add(this.lanePosition(car,edge,along+travel));
+      if(travel<remaining||!next)break;
+      edge=next;along=0;add(this.lanePosition(car,edge,0));next=this.chooseNext(car,edge);
+    }
+    return path;
   }
   // Pick the edge after `edge`: mostly straight on, sometimes a turn, never an
   // immediate U-turn unless the road ends. Deterministic per car and edge.
@@ -312,7 +322,8 @@ export class TrafficSimulation {
     }
     for (const car of this.cars) {
       let target = car.edge.highway==='motorway'?Math.max(car.desired,20):car.desired;
-      const pedestrianStop=this.pedestrianStop?.(car)??Infinity;
+      car.next ??= this.chooseNext(car, car.edge);
+      const pedestrianStop=this.pedestrianStop?.(car,this.previewPath(car))??Infinity;
       if(Number.isFinite(pedestrianStop))target=Math.min(target,Math.sqrt(4*Math.max(0,pedestrianStop)));
       const f = forward(car.heading);
       for (const other of bodies) {
@@ -394,7 +405,8 @@ export class TrafficSimulation {
       car.blockedFor = hits.length ? (car.blockedFor || 0) + dt : 0;
       const blocked = hits.includes(player) || hits.some(h=>h.barrier) || (hits.length > 0 && car.blockedFor < 6);
       const previousState={edge:car.edge,next:car.next,along:car.along,x:car.x,y:car.y,heading:car.heading};
-      car.speed = blocked ? 0 : speed;
+      car.speed = blocked ? 0 : Math.min(speed,Math.max(0,pedestrianStop)/Math.max(dt,.001));
+      if(car.speed<speed-.01)car.braking=true;
       if (blocked) car.braking = true;
       car.along += car.speed * dt;
       let guard = 0;
@@ -418,7 +430,7 @@ export class TrafficSimulation {
       // sideways. Check the actual result as well as the forward probe.
       const entered=bodies.some(other=>other!==car&&other.length&&rectanglesOverlap(car,car,other,other)&&
         blocksMove(previousState,car,other,rectanglesOverlap(previousState,car,other,other)));
-      if(entered){Object.assign(car,previousState);car.speed=0;car.braking=true;}
+      if(entered||this.pedestrianBlocked?.(previousState,car)){Object.assign(car,previousState);car.speed=0;car.braking=true;}
     }
     this.serial++;
   }
