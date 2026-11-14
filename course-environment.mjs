@@ -5,6 +5,8 @@ import {pointInRing} from './map-data.mjs';
 import {roadsideSpace} from './junctions.mjs';
 import {CITY_STYLES,buildingHeight} from './city-style.mjs';
 import {facadeTexture} from './graphics.mjs';
+import {REGIONAL_SCENERY,regionalBuilding} from './regional-scenery.mjs';
+import {regionalFacade} from './regional-facades.mjs';
 const material=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.85,...extra});
 const hash=id=>{let n=2166136261;for(const c of String(id))n=Math.imul(n^c.charCodeAt(0),16777619);return n>>>0;};
 let leafTexture;
@@ -23,7 +25,7 @@ class Details {
  constructor(group,local){this.group=group;this.local=local;this.batches=new Map();this.object=new THREE.Object3D();}
  add(shape,color,point,size,rotation=0){
   const key=shape+color;let b=this.batches.get(key);
-  if(!b){let geo=shape==='tree'?new THREE.SphereGeometry(1,12,8):shape==='pole'?new THREE.CylinderGeometry(.35,.5,1,8):new THREE.BoxGeometry(1,1,1);
+  if(!b){let geo=shape==='tree'||shape==='flower'?new THREE.SphereGeometry(1,12,8):shape==='cone'?new THREE.ConeGeometry(1,1,12):shape==='pole'?new THREE.CylinderGeometry(.35,.5,1,8):new THREE.BoxGeometry(1,1,1);
    if(shape==='tree'){const p=geo.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),noise=1+.12*Math.sin(x*19+z*9)*Math.cos(y*17);p.setXYZ(i,x*noise,y*noise,z*noise);}geo.computeVertexNormals();}
    b={geo,mat:material(shape==='tree'?'#aec39f':color,shape==='tree'?{map:foliageTexture()}:{}),matrices:[]};this.batches.set(key,b);}
   this.object.position.copy(this.local(point,point.h||0));this.object.rotation.set(0,rotation,0);this.object.scale.set(...size);this.object.updateMatrix();b.matrices.push(this.object.matrix.clone());
@@ -39,7 +41,7 @@ function nearestRoad(p,roads){let hit={distance:Infinity};for(const r of roads)f
 
 export function buildCourseBuildings(renderer,features,theme,roads,nodes=[],style='okinawa'){
  const group=renderer.buildingGroup,base=renderer.base,local=(p,h=0)=>renderer.local(p,h),details=new Details(group,local);
- const walls=renderer.facades.map(()=>({p:[],uv:[]})),roof=[],pitchedRoof=[];let signCount=0;
+ const walls=renderer.facades.map(()=>({p:[],uv:[]})),roof=[],pitchedRoof=[],regionalWalls=new Map(),regionalRoofs=new Map();let signCount=0;
  const buildings=features.filter(f=>f.tags.building);
  const urban=['city','urban'].includes(theme);
  const profile=CITY_STYLES[style]||CITY_STYLES.okinawa;
@@ -49,27 +51,30 @@ export function buildCourseBuildings(renderer,features,theme,roads,nodes=[],styl
   const seed=hash(f.id),level=Number(f.tags['building:levels']);
   const h=buildingHeight(f,style,seed,urban);
   const ground=Math.min(...f.points.map(p=>renderer.elevation(p))),top=ground+h;
-  const bucket=walls[seed%walls.length],pts=f.points;
+  const look=regionalBuilding(f,style,seed,h),key=look&&look.kind+look.color;
+  if(look&&!regionalWalls.has(key))regionalWalls.set(key,{p:[],uv:[],mat:material('#ffffff',{map:regionalFacade(look.kind,look.color),roughness:look.kind==='glass'?.3:.88,metalness:look.kind==='glass'?.2:0,side:THREE.DoubleSide})});
+  const bucket=look?regionalWalls.get(key):walls[seed%walls.length],pts=f.points;
   for(let i=1;i<pts.length;i++){
    const a=pts[i-1],b=pts[i],len=distance(a,b);if(len<.1)continue;
-   const vertices=[[a.x,ground-1,a.y],[b.x,ground-1,b.y],[b.x,top,b.y],[a.x,top,a.y]];
+   const vertices=[[a.x,Math.min(ground-1,renderer.elevation(a)-.3),a.y],[b.x,Math.min(ground-1,renderer.elevation(b)-.3),b.y],[b.x,top,b.y],[a.x,top,a.y]];
    const uv=[[0,0],[len,0],[len,h+1],[0,h+1]];
    for(const k of [0,2,1,0,3,2]){const v=vertices[k];bucket.p.push(v[0]-base.x,v[1],v[2]-base.y);bucket.uv.push(...uv[k]);}
   }
   const shape=pts.slice(0,-1).map(p=>new THREE.Vector2(p.x,p.y));
-  for(const tri of THREE.ShapeUtils.triangulateShape(shape,[]))for(const i of tri.reverse())roof.push(shape[i].x-base.x,top,shape[i].y-base.y);
+  const roofBucket=look?(regionalRoofs.get(look.roofColor)||[]):roof;if(look)regionalRoofs.set(look.roofColor,roofBucket);
+  for(const tri of THREE.ShapeUtils.triangulateShape(shape,[]))for(const i of tri.reverse())roofBucket.push(shape[i].x-base.x,top,shape[i].y-base.y);
   // Roof parapets, water tanks and air conditioners give the concrete skyline depth.
   for(let i=1;i<pts.length;i++){
-   const a=pts[i-1],b=pts[i],len=distance(a,b);if(len>2)details.add('box','#c7c4b9',{x:(a.x+b.x)/2,y:(a.y+b.y)/2,h:top-renderer.elevation({x:(a.x+b.x)/2,y:(a.y+b.y)/2})+.3},[.16,.6,len],-headingBetween(a,b));
+   const a=pts[i-1],b=pts[i],len=distance(a,b);if(len>2&&(!look||look.roof==='flat'))details.add('box',look?.cornice?'#d7c9ae':'#a4aaa4',{x:(a.x+b.x)/2,y:(a.y+b.y)/2,h:top-renderer.elevation({x:(a.x+b.x)/2,y:(a.y+b.y)/2})+.16},[.18,.32,len],-headingBetween(a,b));
   }
   if(seed%3===0){if(style==='okinawa')details.add('pole','#ced5d0',{...f.center,h:top-renderer.elevation(f.center)+.8},[1.35,1.5,1.35]);details.add('box','#a9b3b1',{x:f.center.x+2,y:f.center.y,h:top-renderer.elevation({x:f.center.x+2,y:f.center.y})+.4},[1.2,.8,.8]);}
-  if((style==='kyoto'||profile.pitched)&&h<13&&pts.length===5){
+  if((look?look.roof==='gabled':style==='kyoto'||profile.pitched)&&h<16&&pts.length===5){
     const a=pts[0],b=pts[1],c=pts[2],d=pts[3],u={x:(a.x+d.x)/2,y:(a.y+d.y)/2},v={x:(b.x+c.x)/2,y:(b.y+c.y)/2};
-    const roofVertices=[];for(const tri of [[a,b,v],[a,v,u],[d,u,v],[d,v,c]])for(const p of tri)roofVertices.push(p.x-base.x,top+(p===u||p===v?1.4:.15),p.y-base.y);
-    pitchedRoof.push(...roofVertices);
+    const roofVertices=[],rise=Math.min(2.4,distance(a,d)*.28);for(const tri of [[a,b,v],[a,v,u],[d,u,v],[d,v,c],[a,u,d],[b,c,v]])for(const p of tri)roofVertices.push(p.x-base.x,top+(p===u||p===v?rise:.12),p.y-base.y);
+    (look?roofBucket:pitchedRoof).push(...roofVertices);
   }
   // Decorate only frontages near a street; actual map outlines keep alleys open.
-  if(!urban&&seed%5)continue;
+  if(!look&&!urban&&seed%5)continue;
   if(renderer.course?.route&&!renderer.course.route.some(p=>distance(p,f.center)<90))continue;
   const near=nearestRoad(f.center,routeRoads);if(near.distance>45)continue;
   let front=null;
@@ -78,6 +83,10 @@ export function buildCourseBuildings(renderer,features,theme,roads,nodes=[],styl
   const toward={x:near.point.x-front.mid.x,y:near.point.y-front.mid.y},norm=Math.hypot(toward.x,toward.y)||1;
   const p={x:front.mid.x+toward.x/norm*.2,y:front.mid.y+toward.y/norm*.2};
   const rotation=Math.atan2(toward.x,toward.y),width=Math.min(len*.8,9);
+  if(look?.residential){
+   if(look.veranda){const gh=ground-renderer.elevation(p);details.add('box',look.roofColor,{...p,h:gh+2.6},[width,.13,1.25],rotation);for(const side of [-1,1])details.add('box','#d9d9c7',{x:p.x+Math.cos(rotation)*width*.47*side,y:p.y-Math.sin(rotation)*width*.47*side,h:gh+1.3},[.11,2.6,.11],rotation);if(h>5){details.add('box','#d3ccba',{...p,h:gh+3.1},[width,.15,.9],rotation);for(let j=-width/2;j<=width/2;j+=.25)details.add('box','#5d685e',{x:p.x+Math.cos(rotation)*j+toward.x/norm*.55,y:p.y-Math.sin(rotation)*j+toward.y/norm*.55,h:gh+3.6},[.045,.9,.045],rotation);}}
+   details.add('box',look.color,{...p,h:ground-renderer.elevation(p)+.35},[Math.min(width,3),.18,.65],rotation);continue;
+  }
   details.add('box','#263f45',{...p,h:ground-renderer.elevation(p)+1.55},[width,2.4,.12],rotation);
   for(let d=-width/2;d<=width/2;d+=1.5)details.add('box','#c9cdc8',{x:p.x+Math.cos(rotation)*d,y:p.y-Math.sin(rotation)*d,h:ground-renderer.elevation(p)+1.55},[.07,2.45,.17],rotation);
   details.add('box',['#748f81','#c78663','#536f79','#c5b491'][seed%4],{...p,h:ground-renderer.elevation(p)+3},[width+.2,.2,1.05],rotation);
@@ -93,6 +102,8 @@ export function buildCourseBuildings(renderer,features,theme,roads,nodes=[],styl
   }
  }
  walls.forEach((b,i)=>{if(b.p.length){const m=facades[i];m.side=THREE.DoubleSide;group.add(meshFrom(b.p,m,b.uv));}});
+ for(const b of regionalWalls.values())group.add(meshFrom(b.p,b.mat,b.uv));
+ for(const [color,positions]of regionalRoofs)if(positions.length)group.add(meshFrom(positions,material(color,{side:THREE.DoubleSide})));
  if(roof.length)group.add(meshFrom(roof,material('#c4c6bc')));
  if(pitchedRoof.length)group.add(meshFrom(pitchedRoof,material('#51514c',{side:THREE.DoubleSide})));
  // Parking is visible asphalt; it must not disappear into an aerial photograph.
@@ -105,9 +116,10 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
  const group=renderer.environmentGroup,local=(p,h=0)=>renderer.local(p,h),details=new Details(group,local),base=renderer.base;
  const urban=['city','urban'].includes(theme),mountain=theme==='mountain'||theme==='expressway';
  const offRoad=roadsideSpace(roads),occupied=features.filter(f=>f.tags.building||f.tags.amenity==='parking');
- const clear=p=>offRoad(p,.85)&&!occupied.some(f=>insidePolygon(p,f.points));
+ const clear=p=>offRoad(p,.85)&&!renderer.waterAt?.(p)&&!occupied.some(f=>insidePolygon(p,f.points));
  renderer.roadsideProps=[];
  const profile=CITY_STYLES[style]||CITY_STYLES.okinawa;
+ for(const beach of renderer.course?.landscape?.beaches||[]){const positions=renderer.surface.drape(beach,.12).flatMap(p=>[p.x-base.x,p.height,p.y-base.y]);if(positions.length)group.add(meshFrom(positions,material(style==='queenstown'?'#aca996':'#dac8a3')));}
  for(const f of features.filter(f=>f.tags.leisure==='park'||f.tags.natural==='water')){
    const positions=renderer.surface.drape(f.points,.10).flatMap(p=>[p.x-base.x,p.height,p.y-base.y]);
    if(positions.length)group.add(meshFrom(positions,material(f.tags.natural==='water'?'#4e8187':'#7e9563')));
@@ -119,7 +131,7 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
  const cables=[];
  for(const road of roads){
   if(road.tags.highway==='service'||!road.points.some(nearRoute))continue;
-  const w=roadWidth(road.tags),highway=road.tags.highway.startsWith('motorway'),walk=urban&&!highway&&w>=6;
+  const w=roadWidth(road.tags),highway=road.tags.highway.startsWith('motorway'),walk=(urban||REGIONAL_SCENERY[style])&&!highway&&w>=6;
   if(walk)for(let i=1;i<road.points.length;i++){
     const a=road.points[i-1],b=road.points[i],len=distance(a,b),steps=Math.ceil(len/5);
     for(let j=0;j<steps;j++)for(const side of [-1,1]){
@@ -145,7 +157,7 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
      if(previousPole)for(const off of [-.55,.55]){const av=local({x:previousPole.x+r.x*off,y:previousPole.y+r.y*off},8.8),bv=local({x:pole.x+r.x*off,y:pole.y+r.y*off},8.8);cables.push(...av.toArray(),(av.x+bv.x)/2,(av.y+bv.y)/2-.55,(av.z+bv.z)/2,(av.x+bv.x)/2,(av.y+bv.y)/2-.55,(av.z+bv.z)/2,...bv.toArray());}previousPole=pole;
     }
    }const spacing=walk?32:42;remainder=((remainder-len)%spacing+spacing)%spacing;
-   if(mountain||theme==='coast'){
+   if((mountain||theme==='coast')&&!REGIONAL_SCENERY[style]){
     for(const side of [-1,1]){const offset=w/2+.65,aa={x:a.x+r.x*offset*side,y:a.y+r.y*offset*side},bb={x:b.x+r.x*offset*side,y:b.y+r.y*offset*side};
      for(let d=0;d<len;d+=4){const p={x:aa.x+(bb.x-aa.x)*d/len,y:aa.y+(bb.y-aa.y)*d/len};if(offRoad(p,.45))details.add('pole','#d1d7d1',{...p,h:.55},[.10,1.1,.10]);}
      const mid={x:(aa.x+bb.x)/2,y:(aa.y+bb.y)/2};
@@ -187,12 +199,21 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
    for(let d=16;d<len;d+=38){const p={x:a.x+(b.x-a.x)*d/len+Math.cos(h)*(roadWidth(road.tags)/2+1.3),y:a.y+(b.y-a.y)*d/len+Math.sin(h)*(roadWidth(road.tags)/2+1.3)};if(nearRoute(p)&&!building.some(f=>insidePolygon(p,f.points)))treePoints.push({...p,seed:hash(d+road.id)});}
   }
  }
- for(const p of treePoints){if(!clear(p))continue;const s=p.seed??hash(p.id),height=4.6+s%30/10;details.add('pole','#75654d',{...p,h:height*.42},[.26,height*.84,.26]);
+ for(const p of treePoints){if(!clear(p))continue;const s=p.seed??hash(p.id),species=REGIONAL_SCENERY[style]?.tree;
+  if(species){addRegionalTree(details,p,species,s);continue;}
+  const height=4.6+s%30/10;details.add('pole','#75654d',{...p,h:height*.42},[.26,height*.84,.26]);
   for(let i=0;i<(mountain?4:7);i++){const angle=i*2.4+s%20/10,r=i===0?0:1.15,k=mountain?1.7:1;details.add('tree',['#365d3c','#477544','#517c42'][s%3],{x:p.x+Math.cos(angle)*r,y:p.y+Math.sin(angle)*r,h:height-1.0+(i%3)*.5},[(1.05+(s%4)*.15)*k,1.1*k,1.05*k]);}
   if(mountain&&s%2===0)details.add('tree','#477544',{x:p.x+2.1,y:p.y-1.4,h:1},[2.6,1.3,2.3]);
  }
  details.finish();
  buildTolls(renderer,tolls||[]);
+}
+function addRegionalTree(details,p,species,s){
+ const height=(species==='norfolk'?13:species==='eucalyptus'?10:species==='alpine'?10:7)+(s%30)/10;
+ details.add('pole',species==='eucalyptus'?'#bdbaa3':'#756f58',{...p,h:height*.45},[.42,height*.9,.42]);
+ if(species==='norfolk'||species==='alpine'){
+  for(let i=0;i<6;i++){const t=i/6,r=(species==='norfolk'?3.2:2.4)*(1-t*.83);details.add('cone',species==='norfolk'?'#42664f':'#496249',{...p,h:height*(.36+t*.6)},[r,height*.22,r]);}
+ }else{for(let i=0;i<7;i++){const angle=i*2.4+s%5,wide=species==='pohutukawa'?2.8:species==='eucalyptus'?2.1:1.9,x=p.x+Math.cos(angle)*wide*.65,y=p.y+Math.sin(angle)*wide*.65,h=height-1+(i%3)*.5;details.add('tree','#789367',{x,y,h},[wide,species==='pohutukawa'?1.45:2,wide*.85]);if(species==='pohutukawa'&&s%3===0&&i%2===0)details.add('flower','#a64d3f',{x,y,h:h+.75},[wide*.55,.28,wide*.45]);}}
 }
 function buildTolls(renderer,tolls){
  renderer.tollObjects=[];

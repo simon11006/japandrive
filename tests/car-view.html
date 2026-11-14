@@ -38,7 +38,7 @@
   <nav>
     <select aria-label="차량">
       <option value="prius">프리우스</option>
-      <option value="alphard">알파드</option></select
+      <option value="alphard">알파드</option><option value="i30">현대 i30</option><option value="cx5">마쓰다 CX-5</option></select
     ><button data-angle="-.12">앞 3/4</button
     ><button data-angle="-.72">정면</button
     ><button data-angle=".85">측면</button
@@ -52,7 +52,7 @@
     const q = new URLSearchParams(location.search),
       select = document.querySelector("select"),
       stage = new MenuStage();
-    select.value = q.get("car") === "alphard" ? "alphard" : "prius";
+    select.value = ["prius","alphard","i30","cx5"].includes(q.get("car")) ? q.get("car") : "prius";
     let yaw = -0.12;
     const r = new THREE.WebGLRenderer({ antialias: true });
     r.setPixelRatio(Math.min(devicePixelRatio, 2));

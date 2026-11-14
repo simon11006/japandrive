@@ -1,5 +1,5 @@
 import { t } from "./i18n.mjs";
-import {countryProfile,signalLensPositions} from './country-profiles.mjs';
+import {countryProfile,signalLensPositions,signalAppearance} from './country-profiles.mjs';
 import {prepareSignalLayouts,roadsideSpace,roadJunctions,pedestrianSignalMounts} from "./junctions.mjs";
 import {stripPolygon,approachMarkings,maneuverGuides} from './road-markings.mjs';
 import { pointInRing } from './map-data.mjs';
@@ -9,6 +9,7 @@ import {
   roadWidth,
   signalPhase,
   signalRightArrow,
+  signalTurnPhase,
   forward,
   reverseGuides,
   nearestOnSegment,
@@ -17,6 +18,7 @@ import {
 import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
 import { makeCarModel, disposeCarModel } from "./car-model.mjs";
+import {REGIONAL_SCENERY,regionalGroundColor} from './regional-scenery.mjs';
 import { drawNavOverlay } from "./nav-display.mjs";
 import { navigationScale } from './navigation.mjs';
 import {StreetEncounters,pedestrianGreen} from './street-encounters.mjs';
@@ -478,7 +480,13 @@ export class DriveRenderer {
     this.tollObjects = [];
     this.ruleSignature = null;
     this.base = { ...base };
-    this.surface = groundSurface(elevation || (() => 0));
+    const landscape=course?.landscape,regional=REGIONAL_SCENERY[course?.style];
+    this.waterAt=landscape?.waterAt;
+    this.projection=projection;
+    this.scene.fog.color.set(regional?.haze||HAZE);this.scene.fog.density=regional?.fog||.00085;
+    this.camera.far=regional?22000:5000;this.camera.updateProjectionMatrix();
+    this.introCamera.far=regional?22000:6000;this.introCamera.updateProjectionMatrix();
+    this.surface = groundSurface(p=>this.waterAt?.(p)?(landscape.waterLevel-1.5):(elevation?.(p)||0));
     this.elevation = this.surface.height;
     this.bays = bays || [];
     this.signals = signals || [];
@@ -487,7 +495,9 @@ export class DriveRenderer {
     this.ocean.position.x = 0;
     this.ocean.position.z = 0;
     disposeGroup(this.world);
-    if (coast?.length) {
+    if(regional){
+      if(landscape?.coast.length||landscape?.lakes.length){const water=new THREE.Mesh(new THREE.PlaneGeometry(36000,36000),mat(regional.water||'#3b8195',.28,{metalness:.25}));water.rotation.x=-Math.PI/2;water.position.y=(landscape.waterLevel||0)-.02;this.world.add(water);}
+    } else if (coast?.length) {
       const shape = new THREE.Shape(coast.map((p) => new THREE.Vector2(p.x - base.x, -(p.y - base.y))));
       const land = new THREE.Mesh(
         new THREE.ShapeGeometry(shape),
@@ -538,10 +548,12 @@ export class DriveRenderer {
     disposeGroup(this.terrainGroup);
     const positions = [],
       colors = [],
-      range = 1600,
-      step = 25;
+      regional=REGIONAL_SCENERY[this.course?.style];
+    const tiers=[{range:1600,step:25,inner:0},...(regional?[{range:this.course.style==='queenstown'?14000:8000,step:200,inner:1600}]:[])];
+    for(const {range,step,inner}of tiers){
     for (let x = center.x - range; x < center.x + range; x += step)
       for (let y = center.y - range; y < center.y + range; y += step) {
+        if(inner&&Math.abs(x+step/2-center.x)<inner&&Math.abs(y+step/2-center.y)<inner)continue;
         if (this.coastRing && !pointInRing([x + step / 2, y + step / 2], this.coastRing)) continue;
         const pts = [
           { x, y },
@@ -553,10 +565,12 @@ export class DriveRenderer {
           const h = this.elevation(pts[i]);
           positions.push(pts[i].x - this.base.x, h, pts[i].y - this.base.y);
           // Lowland fields and settlements are paler; hills carry denser forest.
-          const c = new THREE.Color(h > 30 ? "#668563" : "#a8b59a");
+          const slope=Math.abs(this.elevation({x:pts[i].x+step,y:pts[i].y})-h)/step;
+          const c = new THREE.Color(regionalGroundColor(this.course?.style,h,slope));
           colors.push(c.r, c.g, c.b);
         }
       }
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -564,7 +578,7 @@ export class DriveRenderer {
     planarUV(g, 9);
     const mesh = new THREE.Mesh(
       g,
-      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: this.textures.grass }),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, ...(regional?{}:{map:this.textures.grass}) }),
     );
     mesh.receiveShadow = true;
     this.terrainGroup.add(mesh);
@@ -849,10 +863,11 @@ export class DriveRenderer {
     disposeGroup(this.signalGroup);
     this.signalHeads = [];
     prepareSignalLayouts(signals, roads);
-    const metal=mat("#747e7f",.4,{metalness:.5});
+    const metal=mat("#747e7f",.4,{metalness:.5}),armMetal=mat('#747e7f',.4,{metalness:.5});
     const clear=roadsideSpace(roads);
-    const country=this.course?.country||'JP',profile=countryProfile(country),vertical=profile.signalLayout==='vertical';
-    const lensPositions=signalLensPositions(country);
+    const country=this.course?.country||'JP',profile=countryProfile(country),appearance=signalAppearance(country,this.course?.id||this.course?.region),{vertical}=appearance;
+    const lensPositions=signalLensPositions(country,this.course?.id||this.course?.region);
+    metal.color.set(appearance.pole);
     const pedestrianIcons=[false,true].map(walking=>canvasTexture(96,112,c=>{
       c.fillStyle='#060d12';c.fillRect(0,0,96,112);
       c.fillStyle='#fff';c.beginPath();c.arc(walking?51:48,19,8,0,Math.PI*2);c.fill();
@@ -863,30 +878,40 @@ export class DriveRenderer {
     }).texture);
     const stops=[],backings=[],crossings=[];
     for(const s of signals){
+      s.country=country;
       const heads=[];
       for(const approach of s.approaches){
         const head=new THREE.Group();
         head.position.copy(this.local(approach.head,5.2));
         head.rotation.y=-approach.heading;
-        box(head,vertical?[.48,1.35,.30]:[1.35,.48,.30],[0,0,0],mat("#29383d"));
+        box(head,vertical?[.48,1.35,.30]:[1.35,.48,.30],[0,0,0],mat(appearance.housing));
+        if(appearance.backboard){
+          const bw=s.profile==='arrow'?1.12:.59,bx=s.profile==='arrow'?.255:0;
+          box(head,[bw,1.53,.045],[bx,0,-.18],mat('#e3e4d9'));
+          box(head,[bw-.035,1.495,.05],[bx,0,-.152],mat('#10161a'));
+        }
         const bulbs=[];
         for(const [i,color]of ["#32965b","#b59432","#933c39"].entries()){
           const bulb=new THREE.Mesh(new THREE.CircleGeometry(.16,24),new THREE.MeshBasicMaterial({color}));
           const [x,y]=lensPositions[i];bulb.position.set(x,y,.16);head.add(bulb);bulbs.push(bulb);
           // Sun visors leave the lenses visible to an approaching driver.
-          box(head,[.35,.035,.20],[x,y+.20,.22],metal);
+          const hood=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.25,16,1,true,0,Math.PI),mat(appearance.housing,.7,{side:THREE.DoubleSide}));
+          hood.rotation.x=Math.PI/2;hood.position.set(x,y,.25);head.add(hood);
         }
-        let arrow;
+        let arrow;const turnArrows=[];
         if(s.profile==='arrow'){
-          const ax=vertical?.5:.43,ay=vertical?-.43:-.49;
-          box(head,[.47,.47,.30],[ax,ay,0],mat('#29383d'));
           const texture=canvasTexture(128,128,c=>{
-            c.fillStyle='#080f12';c.fillRect(0,0,128,128);c.strokeStyle='#fff';c.lineWidth=13;c.lineCap='square';c.lineJoin='miter';
+            c.fillStyle='#080f12';c.fillRect(0,0,128,128);c.strokeStyle='#fff';c.lineWidth=12;c.lineCap='square';
             c.beginPath();c.moveTo(25,64);c.lineTo(98,64);c.moveTo(69,35);c.lineTo(98,64);c.lineTo(69,93);c.stroke();
           }).texture;
-          arrow=new THREE.Mesh(new THREE.CircleGeometry(.185,32),new THREE.MeshBasicMaterial({map:texture,color:'#55ffc2',toneMapped:false}));
-          arrow.position.set(ax,ay,.16);head.add(arrow);
-          box(head,[.4,.03,.2],[ax,ay+.24,.22],metal);
+          for(const [color,ay]of appearance.threeArrows?[['green',-.43],['yellow',0],['red',.43]]:[['green',vertical?-.99:-.49]]){
+            const ax=appearance.threeArrows?.50:vertical?0:.43;
+            box(head,[.47,.47,.30],[ax,ay,0],mat(appearance.housing));
+            const lamp=new THREE.Mesh(new THREE.CircleGeometry(.16,24),new THREE.MeshBasicMaterial({map:texture,color:'#17241f',toneMapped:false}));
+            lamp.position.set(ax,ay,.16);head.add(lamp);turnArrows.push({lamp,color});
+            box(head,[.35,.025,.18],[ax,ay+.20,.22],mat('#222b2c'));
+            if(color==='green')arrow=lamp;
+          }
         }
         const pedestrians=[];
         if(s.profile!=='flash')for(const mount of pedestrianSignalMounts(approach,clear)){
@@ -904,11 +929,15 @@ export class DriveRenderer {
         if(approach.pole){
           const foot=this.local(approach.pole),top=this.local(approach.pole,5.6),end=this.local(approach.head,5.6);
           cylinderBetween(this.signalGroup,foot.toArray(),top.toArray(),.09,metal);
-          cylinderBetween(this.signalGroup,top.toArray(),end.toArray(),.065,metal);
-          cylinderBetween(this.signalGroup,end.toArray(),this.local(approach.head,5.2).toArray(),.05,metal);
+          cylinderBetween(this.signalGroup,top.toArray(),end.toArray(),.065,armMetal);
+          cylinderBetween(this.signalGroup,end.toArray(),this.local(approach.head,5.2).toArray(),.05,armMetal);
+          if(country!=='JP'){
+            // Roadside repeater shares lamp materials with the overhead head.
+            const repeater=head.clone();repeater.position.copy(this.local(approach.pole,3.2));repeater.scale.setScalar(.8);this.signalGroup.add(repeater);
+          }
         }
         this.signalGroup.add(head);
-        heads.push({bulbs,arrow,pedestrians,heading:approach.heading});
+        heads.push({bulbs,arrow,turnArrows,pedestrians,heading:approach.heading});
         const markings=approachMarkings(approach,profile.crossing);stops.push(markings.stop);backings.push(markings.backing);crossings.push(...markings.crossing);
       }
       this.signalHeads.push({signal:s,heads});
@@ -1120,7 +1149,7 @@ export class DriveRenderer {
     const m = this.meter.context,
       mw = this.meter.canvas.width,
       mh = this.meter.canvas.height,
-      tall = this.car.id === "alphard";
+      tall = this.car.id !== "prius";
     m.fillStyle = "#08121b";
     m.fillRect(0, 0, mw, mh);
     const arrows = () => {
@@ -1189,7 +1218,7 @@ export class DriveRenderer {
       m.textAlign = "center";
       m.font = "16px Segoe UI";
       m.fillStyle = "#83aec5";
-      m.fillText("CHG   ECO   PWR", mw * 0.21, mh * 0.56);
+      m.fillText(this.car.id==="alphard"?"CHG   ECO   PWR":"RPM × 1000", mw * 0.21, mh * 0.56);
       m.fillText("km/h", mw * 0.79, mh * 0.6);
     } else gauge(mw * 0.54, mh * 0.6, 91, "#6bb8a2");
     m.textAlign = "center";
@@ -1273,7 +1302,8 @@ export class DriveRenderer {
       for (const head of item.heads) {
         const phase=signalPhase(item.signal,head.heading,time),flashing=phase.startsWith('flash'),
           which=flashing?(Math.floor(time*2)%2===0?(phase==='flash-red'?2:1):-1):{green:0,yellow:1,red:2}[phase];
-        if(head.arrow)head.arrow.material.color.set(signalRightArrow(item.signal,head.heading,time)?'#55ffc2':'#18362c');
+        const turnPhase=signalTurnPhase(item.signal,head.heading,time);
+        for(const a of head.turnArrows)a.lamp.material.color.set(a.color===turnPhase?{green:'#55ffc2',yellow:'#ffcb48',red:'#ff493b'}[a.color]:'#17241f');
         const walk=pedestrianGreen({signal:item.signal,heading:head.heading},time);
         for(const lamps of head.pedestrians){
           lamps[0].material.color.set(walk?'#241519':'#ff565b');
@@ -1417,7 +1447,9 @@ export class DriveRenderer {
     } else {
       // Eyes rest a few degrees below the horizon, as when driving.
       this.camera.rotation.x = layout.viewPitch - (portrait ? 0.005 : 0);
-      if (portrait) this.camera.position.set(eye.x - 0.12, eye.y + 0.02, eye.z + 0.1);
+      // Keep the centre display in the narrower portrait view while reducing
+      // unused roof/footwell space. Both mirrors have live portrait insets.
+      if (portrait) this.camera.position.set(eye.x - 0.22, eye.y + 0.02, eye.z + 0.1);
       else this.camera.position.copy(eye);
       this.camera.fov = verticalFov(view, this.camera.aspect);
     }

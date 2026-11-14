@@ -3,3 +3,4 @@ data/.test-map-*
 _jd.tgz
 node_modules/
 _site/
+tmp/

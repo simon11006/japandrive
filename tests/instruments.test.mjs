@@ -6,6 +6,16 @@ import {VEHICLES} from '../vehicles.mjs';
 import {driverEye,viewSettings} from '../driver-view.mjs';
 const ctx=new Proxy({},{get:(_,key)=>key==='measureText'?()=>({width:10}):key==='createLinearGradient'?()=>({addColorStop(){}}):()=>{},set:()=>true});
 globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>ctx})};
+for(const car of VEHICLES)test(`${car.id}: navigation and reverse feed are in front of the screen housing`,()=>{
+ const parent=new T.Group(),cockpit=buildCockpit({parent,car,navTexture:new T.Texture(),meterTexture:new T.Texture()}),ray=new T.Raycaster(),point=new T.Vector3();
+ parent.updateMatrixWorld(true);const eye=driverEye(car,cockpit.layout,viewSettings()),blockers=[];
+ parent.traverse(o=>{if(o.isMesh&&o!==cockpit.navigation)blockers.push(o);});
+ for(const x of [-.4,0,.4])for(const y of [-.35,0,.35]){
+  point.set(x*cockpit.layout.screenWidth,y*cockpit.layout.screenHeight,0);cockpit.navigation.localToWorld(point);
+  const delta=point.clone().sub(eye);ray.set(eye,delta.clone().normalize());ray.far=delta.length()-.0005;
+  assert.equal(ray.intersectObjects(blockers,false).length,0,`screen ${x}/${y} is hidden`);
+ }
+});
 for(const car of VEHICLES)test(`${car.id}: speed readout is visible through the cockpit at every permitted seat position`,()=>{
  const parent=new T.Group(),cockpit=buildCockpit({parent,car,navTexture:new T.Texture(),meterTexture:new T.Texture()}),ray=new T.Raycaster(),point=new T.Vector3();
  const blockers=[];parent.traverse(o=>{if(o.isMesh&&o!==cockpit.meter&&!([o.material].flat().every(m=>m.transparent&&m.opacity<.2)))blockers.push(o);});

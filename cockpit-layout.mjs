@@ -1,10 +1,26 @@
-// Metre-scale reconstruction from Toyota Japan reference photographs.
+// Metre-scale reconstruction from Toyota, Hyundai and Mazda photographs.
 // Overall car dimensions are published; eye point and component depths remain
-// photo-calibrated estimates rather than Toyota CAD or a physical survey.
+// photo-calibrated estimates rather than OEM CAD or a physical survey.
 // eyeZ puts the eye about 0.57 m behind the wheel hub, a normal seating
 // distance. Door mirrors sit on the door at the belt line just behind the
 // A-pillar base, so the pillar never crosses them (tests/visibility.test.mjs).
 export const COCKPITS = {
+  i30: {
+    wheelRadius:.182,wheelDrop:.40,wheelZ:-.43,
+    screenWidth:.218,screenHeight:.124,screenX:-.015,screenDrop:.235,screenZ:-.83,
+    meterX:.38,meterWidth:.27,meterHeight:.10,meterDrop:.235,meterZ:-.92,
+    glassBottom:-1.23,glassTop:-.48,pillarBaseWidth:.091,pillarTopWidth:.062,
+    mirrorWidth:.24,mirrorHeight:.135,mirrorZ:-1.01,mirrorDrop:.20,
+    eyeX:.38,eyeZ:.14,viewPitch:-.065,reference:'https://www.hyundai.com/worldwide/en/cars/i30/design',
+  },
+  cx5: {
+    wheelRadius:.184,wheelDrop:.415,wheelZ:-.43,
+    screenWidth:.247,screenHeight:.095,screenX:-.012,screenDrop:.225,screenZ:-1.0,
+    meterX:.38,meterWidth:.28,meterHeight:.104,meterDrop:.25,meterZ:-.88,
+    glassBottom:-1.22,glassTop:-.53,pillarBaseWidth:.098,pillarTopWidth:.068,
+    mirrorWidth:.255,mirrorHeight:.148,mirrorZ:-1.0,mirrorDrop:.20,
+    eyeX:.38,eyeZ:.14,viewPitch:-.052,reference:'https://news.mazdausa.com/vehicles-2022-cx-5',
+  },
   prius: {
     wheelRadius: 0.182,
     wheelDrop: 0.365,

@@ -110,13 +110,14 @@ body.on-title .attribution {opacity:.55;font-size:8px;}
 .garage-view {position:absolute;right:0;top:6px;display:flex;padding:3px;background:#111d2ac9;border:1px solid #abc1d42b;border-radius:24px;gap:2px;}
 .garage-view button {border:0;border-radius:20px;font-size:11px;padding:9px 16px;color:#b0becc;background:none;}
 .garage-view button[aria-pressed="true"] {color:#122029;background:var(--menu-lime);}
-#select.game-ui .vehicles {display:flex;gap:14px;align-items:stretch;max-width:700px;width:100%;margin:0;}
+#select.game-ui .vehicles {display:flex;gap:12px;align-items:stretch;max-width:1200px;width:100%;margin:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;}
+#select.game-ui .vehicles .vehicle-card {min-width:210px;height:auto;scroll-snap-align:start;}
 #select.game-ui .vehicle-card {display:flex;flex:1;min-width:0;gap:17px;align-items:center;text-align:left;padding:18px;background:#101e2aee;border:1px solid #93b2c333;border-radius:8px;box-shadow:none;transform:none;}
 #select.game-ui .vehicle-card:is(:hover,.selected) {border-color:var(--menu-lime);background:#1e2d35ef;box-shadow:none;transform:none;}
-.vehicle-number {font:500 11px Arial,sans-serif;color:#688191;}.vehicle-choice {display:grid;gap:5px;}
+.vehicle-number {font:500 11px Arial,sans-serif;color:#688191;}.vehicle-choice {display:grid;gap:5px;min-width:0;}
 .vehicle-choice>small {font:600 9px Arial,sans-serif;letter-spacing:1px;color:#9eb2bf;}
 #select.game-ui .vehicle-card strong {font-size:21px;line-height:1.3;color:#f3f4ed;}
-.vehicle-choice>span {font-size:10px;color:#93a8b6;}.selection-mark {margin-left:auto;color:var(--menu-lime);font-size:22px;}
+.vehicle-choice>span {font-size:10px;color:#93a8b6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.selection-mark {margin-left:auto;color:var(--menu-lime);font-size:22px;}
 body[data-garage-view="interior"] #select.game-ui[data-step="2"] {background:linear-gradient(0deg,#08101bec,transparent 50%);}
 body[data-garage-view="interior"] .garage-info {display:none;}
 
@@ -282,7 +283,7 @@ body[data-garage-view="interior"] .garage-info {display:none;}
  #select.game-ui .course-stars {font-size:8px;}
  #select.game-ui .wizard-controls {padding:6px 0;gap:12px;}#select.game-ui .wizard-controls button {min-height:40px;font-size:11px;padding:8px 18px;}
  #select.game-ui #step-selection {font-size:9px;}#select.game-ui :is(#step-next,#start) {width:170px;}
- #select.game-ui .vehicle-section {grid-template-rows:minmax(0,1fr) 65px;gap:4px;padding-bottom:6px;}
+ #select.game-ui .vehicle-section {grid-template-rows:minmax(0,1fr) 80px;gap:4px;padding-bottom:6px;}
  .garage-info {padding:4px 0;max-width:245px;}.garage-info>small {font-size:8px;}.garage-info h2 {font-size:32px;margin:9px 0;letter-spacing:-1px;}
  .garage-info p {font-size:10px;margin:0;line-height:1.5;}#garage-specs {margin:10px 0;gap:20px;}#garage-specs dt {font-size:8px;}#garage-specs dd {font-size:12px;margin:4px 0;}
  .garage-view button {font-size:9px;padding:6px 12px;}

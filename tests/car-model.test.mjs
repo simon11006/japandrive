@@ -139,10 +139,10 @@ for (const spec of VEHICLES) {
   });
   test(`${spec.id}: rear glass and lamp garnish stay in front of the painted tailgate`, () => {
     const name =
-        spec.id === "prius" ? "prius-lower-hatch-glass" : "rear-black-garnish",
-      y = spec.id === "prius" ? 1.03 : 1.15;
+        spec.id === "prius" ? "prius-lower-hatch-glass" : spec.id === "alphard" ? "rear-black-garnish" : spec.id+"-tail-lamp",
+      y = spec.id === "prius" ? 1.03 : spec.id === "i30" ? 1.015 : 1.15;
     const hit = new T.Raycaster(
-      new T.Vector3(0.15, y, 4),
+      new T.Vector3(["i30","cx5"].includes(spec.id) ? .58 : .15, y, 4),
       new T.Vector3(0, 0, -1),
     ).intersectObject(car, true)[0];
     assert.equal(hit?.object.name, name);

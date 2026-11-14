@@ -1,6 +1,6 @@
 {
-  "reviewed": "2026-11-14",
-  "method": "Toyota official front/rear photographs were visually compared with original native Three.js geometry. No third-party photograph is redistributed or used as a vehicle skin. Dimensions and wheel sizes match vehicles.mjs; surface curves, trim placement, paint colours and the simplified interior visible through the windscreen are estimates, not OEM CAD.",
+  "reviewed": "2026-11-15",
+  "method": "Toyota, Hyundai and Mazda official photographs were visually inspected before editing original Three.js geometry. No third-party photograph is redistributed or used as a vehicle skin. Dimensions and wheel sizes match vehicles.mjs; curves, trim, colours, driver eye points and simplified cabins are estimates, not OEM CAD. Rental references demonstrate fleet examples, not a most-rented ranking. Overseas left-hand-drive cabin photographs are interpreted as right-hand-drive layouts.",
   "vehicles": [
     {
       "id": "prius",
@@ -37,7 +37,35 @@
         "https://toyota.jp/ucar/catalog/brand-TOYOTA/car-ALPHARD/202306/10149467/",
         "https://toyota.jp/pages/contents/carlineup/archive/alphard/2023-06/pdf/alphard_main_s_202306_202411.pdf"
       ]
+    },
+    {
+      "id": "i30",
+      "generation": "PD third-generation hatch, 2021 Australian facelift reference, right-hand-drive, 17-inch wheels",
+      "features": ["compact five-door hatch proportions", "hexagonal cascading grille and swept lamps", "small rear quarter glass and integrated roof spoiler", "driver instrument binnacle, centre tablet, separate vents and physical climate controls"],
+      "sources": [
+        "https://www.hyundai.com/au/en/news/n-performance/bold-style-safe-drive-2021-i30-hatchback.html",
+        "https://www.hyundai.com/content/dam/hyundai/au/en/hyundai-info/news/2020/10/bold-style-safe-drive-2021-i30-hatchback/i30-Elite-Hatch-2021_01_800x600.jpg",
+        "https://www.hyundai.com/content/dam/hyundai/ww/en/images/find-a-car/pip/cars/i30-pde/i30-pde-design-interior-accordion-m.jpg",
+        "https://www.hyundai.com/content/dam/hyundai/ww/en/images/find-a-car/pip/cars/i30-pde/i30-pde-design-rear-accordion-m.jpg",
+        "https://www.hyundai.com/content/dam/hyundai/au/en/models/i30/docs/Hyundai_i30_Hatch_Specifications.pdf",
+        "https://images.hertz.com/pdfs/Asia_Hertz_Australia_Driving_Guide_KR.pdf"
+      ],
+      "notes": "The Hertz guide is an older fleet example, not a current availability guarantee. A 10.6 m turning circle is stored as a 5.3 m radius."
+    },
+    {
+      "id": "cx5",
+      "generation": "KF second generation, 2022 exterior/cabin reference, New Zealand rental example, right-hand-drive, 17-inch wheels",
+      "features": ["raised SUV proportions and long bonnet", "shield grille with chrome surround and narrow paired lamps", "dark wheel-arch cladding and tapered quarter glass", "wide dashboard display, driver dials and console controller"],
+      "sources": [
+        "https://news.mazdausa.com/vehicles-2022-cx-5",
+        "https://news.mazdausa.com/image/2022-CX-5-2.5-Turbo-Signature_02-1024x683.jpg",
+        "https://www.mazdausa.com/siteassets/pdf/brochures/2022/cx-5/2022-mazda-cx-5-crossover-suv.pdf",
+        "https://www.mazda.co.jp/content/dam/mazda/official/mazda-co-jp/cars/cx-5/common/pdf/cx-5_specification_202207.pdf",
+        "https://christchurchcarrent.co.nz/fleet/mazda-cx-5-skyactiv/",
+        "https://aucklandcarrentals.nz/fleet/mazda-cx-5-skyactiv/"
+      ],
+      "notes": "Official brochure interior and exterior pages were rendered and visually inspected. Dimensions use the KF Japanese specification, not the larger third-generation 2026 vehicle. No claim of an exact rental trim."
     }
   ],
-  "surfaceRevision": "0.13: rounded bumper and shoulder cross-sections, flared wheel arches, curved window openings with thin seals, and lamps/grille fitted to the front and rear body skins. Front, side and rear views compared with official photographs."
+  "surfaceRevision": "0.15: shared roof/glass and cowl boundaries, attached mirror roots and spoilers, flush pane seals, broad side-glass reflections, wheel contact shadows and exact podium contact; two distinct non-Toyota vehicles with their own dimensions and cockpit layouts."
 }

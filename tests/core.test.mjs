@@ -141,12 +141,14 @@ test("remaining distance follows winding roads instead of the straight-line dist
   assert.equal(p.distance, 5);
   assert.equal(p.travelled, 40);
 });
-test("two vehicles retain Toyota sizes and reproduce the specified outer-wheel radius", () => {
+test("four vehicles retain generation-specific sizes and reproduce the specified turning radius", () => {
   assert.deepEqual(
     VEHICLES.map((v) => [v.length, v.width, v.wheelbase]),
     [
       [4.54, 1.76, 2.7],
       [4.995, 1.85, 3],
+      [4.34, 1.795, 2.65],
+      [4.575, 1.845, 2.7],
     ],
   );
   for (const v of VEHICLES) {

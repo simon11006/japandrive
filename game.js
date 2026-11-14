@@ -22,6 +22,8 @@ import { drawNavMap, drawCarMarker } from "./nav-display.mjs";
 import { loadViewSettings, saveViewSettings, viewSettings, VIEW_DEFAULTS } from "./driver-view.mjs";
 import { loadTerrain } from "./terrain.mjs";
 import {courseLocation} from './country-profiles.mjs';
+import {loadWorldTerrain} from './world-terrain.mjs';
+import {loadLandscape} from './world-landscape.mjs';
 import {
   mappedSpeedLimit,
   DrivingScore,
@@ -48,6 +50,7 @@ import {
   nearestOnSegment,
   signalPhase,
   signalRightArrow,
+  signalTurnPhase,
   forward,
   headingBetween,
   distance,
@@ -215,7 +218,7 @@ function renderVehicles() {
       button.className = `vehicle-card${v.id === car.id ? " selected" : ""}`;
       button.setAttribute("aria-pressed", String(v.id === car.id));
       button.dataset.car=v.id;
-      button.innerHTML=`<span class="vehicle-number">${v.id==='prius'?'01':'02'}</span><span class="vehicle-choice"><small>TOYOTA ${v.english}</small><strong>${v.name.replace('토요타 ','')}</strong><span>${v.id==='prius'?'낮은 시점 · 가벼운 차체':'높은 시점 · 넓은 차체'}</span></span><span class="selection-mark" aria-hidden="true">${v.id===car.id?'✓':'+'}</span>`;
+      button.innerHTML=`<span class="vehicle-number">${String(VEHICLES.indexOf(v)+1).padStart(2,'0')}</span><span class="vehicle-choice"><small>${v.brand||'TOYOTA'} ${v.english}</small><strong>${v.name.replace(/^(토요타|현대|마쓰다) /,'')}</strong><span>${v.choiceHint}</span></span><span class="selection-mark" aria-hidden="true">${v.id===car.id?'✓':'+'}</span>`;
       button.onclick = () => {
         car = v;
         renderVehicles();
@@ -225,6 +228,7 @@ function renderVehicles() {
       return button;
     }),
   );
+  revealSelectedVehicle();
 }
 
 // The game works two ways. With its own server (start-game.bat or the
@@ -810,9 +814,9 @@ async function chooseCourse(c){
   try{
     const bundle=courseCache.get(c.id)||await json(c.bundle);courseCache.set(c.id,bundle);
     const nextProjection=projection(bundle.origin);
-    const [terrain,boundary]=await Promise.all([c.country==='JP'?loadTerrain(nextProjection):Promise.resolve(()=>0),c.region==='오키나와'?json('./data/okinawa-main-island.geojson'):Promise.resolve(null)]);
+    const [terrain,boundary,landscape]=await Promise.all([c.country==='JP'?loadTerrain(nextProjection):loadWorldTerrain(c.id),c.region==='오키나와'?json('./data/okinawa-main-island.geojson'):Promise.resolve(null),c.country==='JP'?null:loadLandscape(c.id,nextProjection)]);
     if(selectedCourse.id!==c.id)return;
-    courseWorld={projection:nextProjection,elevation:terrain,coast:boundary?.geometry.coordinates[0].map(nextProjection.toLocal)||null};
+    courseWorld={projection:nextProjection,elevation:terrain,landscape,coast:boundary?.geometry.coordinates[0].map(nextProjection.toLocal)||null};
     regionReady=true;
     courseBundle=bundle;
     const start=bundle.route.geometry.coordinates[0],end=bundle.route.geometry.coordinates.at(-1);
@@ -856,7 +860,7 @@ function prepareCourseWorld(){
   tollSession=new TollSession(bundle.tolls.map(g=>({...g,...proj.toLocal(g.geo),mode})),mode);
   const graded=courseElevation(elevation,store.roads,tollSession.gates,parkingGoal);
   driver?.setup({base:pos,roads:store.roads,features,coast,elevation:graded,signals,bays,car,projection:proj,
-    course:{country:selectedCourse.country,theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
+    course:{id:selectedCourse.id,region:selectedCourse.region,country:selectedCourse.country,landscape:courseWorld.landscape,theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
   driver?.setRoadRules(roadRules,store.roads);
   traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
   traffic.pedestrianStop=(vehicle,path)=>driver?.encounters?.stopDistance(vehicle,path)??Infinity;
@@ -887,7 +891,7 @@ const wizardTitles = [
 ];
 const wizardDescriptions = [
   "별점과 예상 시간, 코스의 특징을 확인하세요. 도착 후 주차까지 이어집니다.",
-  "두 차량의 크기와 회전 반경 차이를 익혀 보세요.",
+  "네 차량의 크기와 회전 반경 차이를 익혀 보세요.",
   "여유로운 도로부터 차량이 많은 도심까지, 세 단계로 조절합니다.",
   "선택한 코스를 확인하고 천천히 출발하세요.",
 ];
@@ -940,11 +944,19 @@ function showWizardStep(step, focus = true) {
   updateWizard();
   drawOverview();
   if(wizardStep===1)requestAnimationFrame(()=>document.querySelector(`[data-course="${selectedCourse?.id}"]`)?.scrollIntoView({behavior:'instant',block:'nearest',inline:'nearest'}));
+  if(wizardStep===2)revealSelectedVehicle();
   if (focus) {
     $("#step-title").focus({ preventScroll: true });
     $("#select").scrollTo({ top: 0, behavior: "instant" });
   }
 }
+function revealSelectedVehicle(){
+  requestAnimationFrame(()=>{
+    if(!$('#select').hidden&&wizardStep===2)
+      $('#vehicles .selected')?.scrollIntoView({behavior:'instant',block:'nearest',inline:'center'});
+  });
+}
+window.addEventListener('resize',revealSelectedVehicle);
 function updateWizard() {
   for (const b of document.querySelectorAll("#step-progress button"))
     b.disabled = Number(b.dataset.step) > maxReachedStep;
@@ -961,8 +973,9 @@ function updateWizard() {
   $("#step-next").disabled =
     !regionReady || busy || !selectedCourse || !courseBundle;
   $('#garage-name').textContent=car.english;
-  $('#garage-description').textContent=car.id==='prius'?'낮은 운전 자세, 중앙 계기판. 골목에서 차폭 감각을 익히세요.':'높은 운전 자세, 넉넉한 실내. 큰 차체와 회전 반경을 익히세요.';
-  $('#garage-specs').innerHTML=[['차폭',car.width.toFixed(2)+' m'],['회전 반경',car.turningRadius.toFixed(1)+' m'],['시점',car.id==='prius'?'승용차':'승합차']].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+  $('#garage-brand').textContent=`${car.brand||'TOYOTA'} / RIGHT-HAND DRIVE`;
+  $('#garage-description').textContent=car.description;
+  $('#garage-specs').innerHTML=[['차폭',car.width.toFixed(3).replace(/0$/,'')+' m'],['회전 반경',car.turningRadius.toFixed(1)+' m'],['시점',car.bodyType]].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
   $("#departure-name").textContent = departure?.name || "출발지를 선택하세요";
   $("#drive-summary").textContent = `${car.name} · ${difficulty.name} · ${difficulty.description}`;
   $("#review-course-title").textContent=selectedCourse?.name||'';
@@ -1660,17 +1673,17 @@ function hud() {
   const toPark = parkingGoal ? distance(pos, parkingGoal.center) : Infinity;
   const parkingNearby=toPark<65&&progress.remaining<120;
   const status = parkingStatus({ ...pos, heading, speed, parkingBrake }, car, parkingGoal, parkedSeconds);
-  const directionVector = forward(heading);
   const aheadSignals = signals
-    .map((s) => ({
+    .map((s) => {const approach=approachFor(s,heading),f=forward(approach?.heading??heading);return ({
       signal: s,
-      ahead: (s.x - pos.x) * directionVector.x + (s.y - pos.y) * directionVector.y,
-      lateral: Math.abs((s.x - pos.x) * directionVector.y - (s.y - pos.y) * directionVector.x),
-    }))
-    .filter((s) => s.ahead > 0 && s.ahead < 100 && s.lateral < 8)
+      approach,
+      ahead: (s.x - pos.x) * f.x + (s.y - pos.y) * f.y,
+      lateral: Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x-(approach?.offset||0)),
+    });})
+    .filter((s) => (!s.signal.approaches||s.approach)&&s.ahead > 0 && s.ahead < 100 && s.lateral < (s.approach?.width/2+1||8))
     .sort((a, b) => a.ahead - b.ahead);
   const nearbySignal = aheadSignals[0],
-    signalColor = nearbySignal ? signalPhase(nearbySignal.signal, heading, simulationTime) : "none";
+    signalColor = nearbySignal ? signalPhase(nearbySignal.signal, nearbySignal.approach?.heading??heading, simulationTime) : "none";
   if (parkingNearby)
     $("#instruction").textContent =
       status.inside ? "제동을 눌러 완전히 멈추면 주차 완료" : "초록색 P 주차면 안에 차 전체를 넣으세요";
@@ -1686,7 +1699,7 @@ function hud() {
     then:then?.maneuver.type==='turn'&&then.atDistance-next.atDistance<80?{maneuver:then.maneuver,distance:then.atDistance-next.atDistance}:null,
     action: direction,
     lesson: laneAdvice || (gear>0&&driver?.encounters?.approaching({...pos,heading,length:car.length})?'횡단보도 · 보행자가 건넌 뒤 출발':'') || (toTurn<65&&next?.maneuver.modifier?.includes('right')
-      ? (nearbySignal&&signalRightArrow(nearbySignal.signal,heading,simulationTime)?'우회전 화살표 · 진행 방향 확인':'우회전 · 대향차 확인 후 왼쪽 차로')
+      ? (nearbySignal&&signalRightArrow(nearbySignal.signal,nearbySignal.approach?.heading??heading,simulationTime)?'우회전 화살표 · 진행 방향 확인':'우회전 · 대향차 확인 후 왼쪽 차로')
       : toTurn<65&&next?.maneuver.modifier?.includes('left')?'좌회전 · 왼쪽 가장자리를 따라 천천히':''),
     alert:!!laneAdvice,
     street: korean(next?.name || ""),
@@ -1775,7 +1788,7 @@ function hud() {
   const parkButton=$('[data-action="brake"]');parkButton.textContent=parkingBrake?'주차 해제':'주차 잠금';parkButton.setAttribute('aria-pressed',String(parkingBrake));parkButton.classList.toggle('selected',parkingBrake);
   for(const [action,side]of [['blink-left',-1],['blink-right',1]])$(`[data-action="${action}"]`).setAttribute('aria-pressed',String(blinker===side));
   if (nearbySignal && nearbySignal.ahead < 45 && signalColor === "red" && !done && !paused)
-    $("#hint").textContent = signalRightArrow(nearbySignal.signal,heading,simulationTime)
+    $("#hint").textContent = signalRightArrow(nearbySignal.signal,nearbySignal.approach?.heading??heading,simulationTime)
       ? "녹색 우회전 화살표입니다. 우회전 차량만 진행 방향을 확인하세요."
       : "빨간 신호입니다. 정지선 앞에 멈추고 녹색 신호를 기다리세요.";
 }
@@ -2523,17 +2536,19 @@ function frameBody(t) {
         const f = forward(approach?.heading??heading),
           a = (s.x - previous.x) * f.x + (s.y - previous.y) * f.y - stopDistance-car.length/2,
           b = (s.x - pos.x) * f.x + (s.y - pos.y) * f.y - stopDistance-car.length/2,
-          l = Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x);
-        const phase=signalPhase(s,heading,simulationTime);
+          l = Math.abs((s.x - pos.x) * f.y - (s.y - pos.y) * f.x-(approach?.offset||0));
+        const incoming=approach?.heading??heading;
+        const phase=signalPhase(s,incoming,simulationTime);
         const signalKey=`${s.timingId??s.id}:${(approach?.heading??s.axis??0).toFixed(3)}`;
         if(phase==='flash-red'&&b>=0&&b<12&&speed<.1)stopHistory.set('flash-'+signalKey,true);
         const upcoming=steps.find(step=>step.atDistance>routeProgress(route,pos,routeInfo.distance).travelled-6&&step.maneuver.type==='turn');
-        const arrowAllowed=signalRightArrow(s,heading,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
+        const arrowAllowed=signalRightArrow(s,incoming,simulationTime)&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
         const inApproach=gear>0&&l<(approach?approach.width/2+1:5);
-        const mustStop=(phase==='red'&&!arrowAllowed)||phase==='flash-red';
+        const redTurn=signalTurnPhase(s,incoming,simulationTime)==='red'&&upcoming?.maneuver.modifier?.includes('right')&&distance(upcoming.point,s)<35;
+        const mustStop=(phase==='red'&&!arrowAllowed)||phase==='flash-red'||redTurn;
         if(inApproach)scoreCard.waitAtSignal(signalKey,{dt,stopped:speed<.1,frontDistance:b,mustStop,time:simulationTime});
         const crossesLine=inApproach&&a>0&&b<=0;
-        const illegal=(phase==='red'&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+signalKey));
+        const illegal=redTurn||(phase==='red'&&!arrowAllowed)||(phase==='flash-red'&&!stopHistory.get('flash-'+signalKey));
         if (
           crossesLine && illegal &&
           simulationTime - lastSignalViolation > 3

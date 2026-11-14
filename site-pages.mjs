@@ -22,8 +22,8 @@ const COPY = {
   ko: {
     title: "KEEP LEFT · 일본·호주·뉴질랜드 좌측통행 운전 게임",
     description:
-      "일본, 호주, 뉴질랜드의 실제 도로 형태를 바탕으로 만든 짧은 운전 코스. 프리우스와 알파드를 골라 내비게이션을 따라 달리고 주차하세요. 설치 없이 즐기는 한국어·영어 웹게임.",
-    eyebrow: "왼쪽으로 떠나는 작은 여행",
+      "일본, 호주, 뉴질랜드의 실제 도로 형태를 바탕으로 만든 짧은 운전 연습 게임. 프리우스·알파드·현대 i30·마쓰다 CX-5로 내비게이션을 따라 달리고 주차하세요. 설치 없이 즐기는 한국어·영어 웹게임.",
+    eyebrow: "좌측통행 운전 연습",
     headline: "낯선 길도,<br><em>왼쪽으로.</em>",
     lede: "복잡한 도시부터 조용한 해안 마을까지.<br>한 번에 10분 이내, 새로운 길에 익숙해지는 드라이브.",
     play: "무료로 플레이",
@@ -49,8 +49,8 @@ const COPY = {
       ],
       [
         "02",
-        "두 차량, 다른 시야",
-        "프리우스와 알파드의 차폭과 눈높이 차이를 느껴 보세요. 사이드미러와 후방카메라로 주차를 마무리합니다.",
+        "네 차량, 다른 시야",
+        "프리우스·알파드·현대 i30·마쓰다 CX-5의 차폭과 눈높이 차이를 느껴 보세요. 사이드미러와 후방카메라로 주차를 마무리합니다.",
       ],
       [
         "03",
@@ -63,7 +63,7 @@ const COPY = {
       "PC는 방향키로 가속·제동·조향. 정차 중 브레이크를 누른 채 R로 전후진을 전환하고 B로 파킹을 조작하세요. 스마트폰·태블릿은 화면 버튼과 가로 전체화면을 이용할 수 있습니다.",
     scopeTitle: "짧은 코스, 분명한 재현 범위.",
     scopeText:
-      "도로와 건물 윤곽은 OpenStreetMap 기반입니다. 교통·신호 주기·주차면과 건물 외관은 연습을 위해 구성했습니다. 호주·뉴질랜드 코스의 지형 높이는 평탄화했습니다. 표시 시간은 교통량과 운전 방식에 따라 달라질 수 있습니다.",
+      "도로·건물·해안선은 OpenStreetMap, 지형은 공개 표고 자료를 참고했습니다. 지역별 거리 사진에서 건축·수목의 특징을 반영했습니다. 개별 건물의 실사 복제는 아니며 교통·신호 주기·주차면은 연습용입니다. 실제 플레이 시간은 교통량과 운전 방식에 따라 달라집니다.",
     scopeNote:
       "일본·호주·뉴질랜드의 모든 운전 규칙을 다루는 교육 과정은 아닙니다. 실제 운전 전에는 현지 도로 규칙을 확인하세요. 최신 WebGL 지원 브라우저와 그래픽 가속이 필요합니다.",
     ready: "다음 모퉁이에서 만나요.",
@@ -83,7 +83,7 @@ const COPY = {
       ],
     ],
     credit:
-      "지도: © OpenStreetMap 기여자 · 일부 일본 지형·항공사진: 국토지리원",
+      "지도: © OpenStreetMap 기여자 · 일본 지형·항공사진: 국토지리원 · 해외 지형: Mapzen Terrain Tiles (Geoscience Australia·LINZ·USGS)",
     back: "게임으로",
     source: "프로젝트",
     lang: "언어",
@@ -93,8 +93,8 @@ const COPY = {
     title:
       "KEEP LEFT · Left-side driving game in Japan, Australia & New Zealand",
     description:
-      "Play short driving courses based on real roads in Japan, Australia and New Zealand. Choose a Prius or Alphard, follow navigation and park. A free browser game in English and Korean.",
-    eyebrow: "SMALL JOURNEYS. A DIFFERENT SIDE.",
+      "Practise driving on the left in Japan, Australia and New Zealand. Choose a Prius, Alphard, Hyundai i30 or Mazda CX-5, follow navigation and park. A free browser game in English and Korean.",
+    eyebrow: "LEFT-SIDE DRIVING PRACTICE",
     headline: "New roads.<br><em>Keep left.</em>",
     lede: "From busy city blocks to quiet coastal towns.<br>Get familiar with the left side, one short drive at a time.",
     play: "Play for free",
@@ -121,8 +121,8 @@ const COPY = {
       ],
       [
         "02",
-        "Two cars. A different perspective.",
-        "Try the Prius and Alphard to experience different widths and eye heights. Use the door mirrors and reversing camera to park.",
+        "Four cars. Different perspectives.",
+        "Try the Prius, Alphard, Hyundai i30 and Mazda CX-5 to experience different widths and eye heights. Use the door mirrors and reversing camera to park.",
       ],
       [
         "03",
@@ -135,7 +135,7 @@ const COPY = {
       "On a computer, use the arrow keys to accelerate, brake and steer. Hold the brake while stopped, then press R to switch drive/reverse or B for parking hold. Phones and tablets have touch controls and a landscape fullscreen option.",
     scopeTitle: "Short courses. An honest view of the world.",
     scopeText:
-      "Roads and building footprints come from OpenStreetMap. Traffic, signal timing, parking bays and building appearances are practice scenery. Elevation is flattened in Australian and New Zealand courses. Estimated times vary with traffic and driving style.",
+      "Roads, building footprints and coastlines use OpenStreetMap; terrain uses public elevation data. Local street photos inform architecture and vegetation. Individual buildings are interpretations, while traffic, signal timing and parking bays are practice arrangements. Actual play time varies with traffic and driving style.",
     scopeNote:
       "This is not a complete driving course or a substitute for the local road code. Check local rules before driving in real life. A recent WebGL-capable browser with graphics acceleration is required.",
     ready: "See you at the next corner.",
@@ -155,7 +155,7 @@ const COPY = {
       ],
     ],
     credit:
-      "Map: © OpenStreetMap contributors · Some Japanese elevation and aerial imagery: GSI Japan",
+      "Map: © OpenStreetMap contributors · Japanese elevation and aerial imagery: GSI Japan · Overseas terrain: Mapzen Terrain Tiles (Geoscience Australia, LINZ, USGS)",
     back: "Play",
     source: "Project",
     lang: "Language",

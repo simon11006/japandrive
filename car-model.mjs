@@ -1,7 +1,7 @@
 import * as T from "./vendor/three.module.js";
 import { VEHICLES } from "./vehicles.mjs";
 
-// Original, photo-informed geometry: XW50 Prius and 40-series Alphard.
+// Original, photo-informed geometry: Prius XW50, Alphard 40, i30 PD, CX-5 KF.
 // Dimensions follow vehicles.mjs; surface curves and details are estimates.
 // See references/exterior-model-sources.json. Photographs are not used as skins.
 const PROFILES = {
@@ -97,6 +97,23 @@ const PROFILES = {
       ],
     ],
   },
+  i30: {
+    tyre: .3214, tyreWidth: .225, rim: .2159, paint: "#2463a6",
+    body: [[-2.17,.77,.70],[-2.05,.84,.78],[-1.65,.885,.88],[-1.1,.8975,.97],[0,.88,1.02],[.9,.8975,1.07],[1.8,.865,1.09],[2.17,.77,1.035]],
+    roof: [[-.43,1.395,.665],[-.05,1.455,.69],[.75,1.45,.68],[1.60,1.385,.65]],
+    windshield: {bottom:[-1.05,.98,.81],top:[-.43,1.395,.665]},
+    rearWindow: {bottom:[2.06,1.12,.73],top:[1.60,1.385,.65]},
+    windows: [ [[-1.0,.985],[-.4,1.365],[.23,1.395],[.24,1.037]], [[.31,1.045],[.31,1.395],[1.13,1.36],[1.28,1.12],[1.19,1.08]], [[1.35,1.09],[1.22,1.34],[1.58,1.31],[1.81,1.12]] ],
+  },
+  cx5: {
+    tyre: .36215, tyreWidth: .225, rim: .2159, paint: "#9f2635",
+    body: [[-2.2875,.78,.91],[-2.17,.84,1.0],[-1.7,.914,1.055],[-1.25,.9225,1.10],[-.4,.905,1.12],[.7,.9225,1.19],[1.6,.91,1.25],[2.2875,.78,1.19]],
+    roof: [[-.48,1.60,.70],[-.1,1.67,.725],[.6,1.68,.72],[1.68,1.60,.68]],
+    windshield: {bottom:[-1.15,1.13,.82],top:[-.48,1.6,.70]},
+    rearWindow: {bottom:[2.18,1.28,.76],top:[1.68,1.60,.68]},
+    windows: [ [[-1.09,1.13],[-.44,1.568],[.21,1.608],[.21,1.17]], [[.29,1.18],[.29,1.61],[1.14,1.59],[1.31,1.29],[1.20,1.23]], [[1.40,1.25],[1.24,1.55],[1.65,1.51],[1.91,1.32]] ],
+  },
+
 };
 const V = (p) => new T.Vector3(...p),
   lerp = T.MathUtils.lerp,
@@ -280,6 +297,14 @@ function emblem(parent, x, y, z, m, rear = false) {
     m.chrome,
   );
 }
+function rentalEmblem(parent,id,x,y,z,m,rear=false) {
+  const zz=z+(rear?.008:-.008);
+  ellipse(parent,id+'-badge',x,y,zz,.066,.043,.004,m.chrome);
+  const strokes=id==='i30'
+    ? [[[-.036,-.026],[-.015,.027]],[[.015,-.027],[.036,.026]],[[-.025,0],[.025,0]]]
+    : [[[-.058,.018],[-.029,.009],[0,-.025],[.029,.009],[.058,.018]]];
+  for(const a of strokes)tube(parent,id+'-badge-mark',a.map(([dx,dy])=>[x+dx,y+dy,zz]),.004,m.chrome);
+}
 function plateTexture(id) {
   if (typeof document === "undefined") return null;
   const c = document.createElement("canvas");
@@ -324,19 +349,19 @@ function makeMaterials(id, paint) {
       name: "tinted side glass",
       color: "#16282e",
       metalness: 0.08,
-      roughness: 0.17,
-      clearcoat: 1,
-      clearcoatRoughness: 0.06,
-      envMapIntensity: 0.65,
+      roughness: 0.23,
+      clearcoat: 0.45,
+      clearcoatRoughness: 0.12,
+      envMapIntensity: 0.45,
       side: T.DoubleSide,
     }),
     privacy: new T.MeshPhysicalMaterial({
       name: "rear privacy glass",
       color: "#0c151d",
-      metalness: 0.25,
-      roughness: 0.1,
-      clearcoat: 1,
-      envMapIntensity: 0.65,
+      metalness: 0.08,
+      roughness: 0.22,
+      clearcoat: 0.45,
+      envMapIntensity: 0.45,
       side: T.DoubleSide,
     }),
     black: new T.MeshStandardMaterial({ color: "#12161b", roughness: 0.8 }),
@@ -577,6 +602,16 @@ function roundedOutline(points, radius = 0.035) {
   return result;
 }
 function addCabin(group, p, m, id, sideX) {
+  // Glass, seals and painted pillars share the exact same boundary curve.
+  // Previously the glass corners sat 34 mm above the curved roof edge.
+  const glassPoint = (data, t, v) => {
+    const a=data.bottom,b=data.top,baseY=sample(p.body,a[0],2),
+      baseWidth=Math.min(a[2],sideX(a[0],baseY)),
+      bottomY=baseY+.065*(1-(t*baseWidth/sideX(a[0],baseY))**2),
+      topY=sample(p.roof,b[0],1)-.034*t*t;
+    return [t*lerp(baseWidth,b[2],v),lerp(bottomY,topY,v)+.001,
+      lerp(a[0],b[0],v)+(a[0]<0?-.018:.015)*(1-t*t)*Math.sin(v*Math.PI)];
+  };
   const roof = surface(
     group,
     "painted-roof",
@@ -604,19 +639,7 @@ function addCabin(group, p, m, id, sideX) {
       name,
       18,
       12,
-      (u, v) => {
-        const a = data.bottom,
-          b = data.top,
-          t = u * 2 - 1;
-        return [
-          t * lerp(a[2], b[2], v),
-          lerp(a[1], b[1], v) + 0.012 * (1 - t * t),
-          lerp(a[0], b[0], v) +
-            (name === "windshield" ? -0.018 : 0.015) *
-              (1 - t * t) *
-              Math.sin(v * Math.PI),
-        ];
-      },
+      (u, v) => glassPoint(data,u*2-1,v),
       mat,
       normal,
     );
@@ -627,23 +650,15 @@ function addCabin(group, p, m, id, sideX) {
     tube(
       group,
       name + "-lower-seal",
-      [
-        [-a[2], a[1], a[0]],
-        [0, a[1] + 0.012, a[0]],
-        [a[2], a[1], a[0]],
-      ],
-      0.014,
+      Array.from({length:25},(_,i)=>glassPoint(data,i/12-1,0)),
+      0.007,
       m.black,
     );
     tube(
       group,
       name + "-upper-seal",
-      [
-        [-b[2], b[1], b[0]],
-        [0, b[1] + 0.01, b[0]],
-        [b[2], b[1], b[0]],
-      ],
-      0.012,
+      Array.from({length:25},(_,i)=>glassPoint(data,i/12-1,1)),
+      0.006,
       m.black,
     );
   }
@@ -659,13 +674,10 @@ function addCabin(group, p, m, id, sideX) {
         24,
         3,
         (u, v) => {
-          const a = data.bottom,
-            b = data.top,
-            z = lerp(a[0], b[0], u),
-            y = lerp(a[1], b[1], u);
+          const [x,y,z] = glassPoint(data,side,u);
           return [
-            side * lerp(lerp(a[2], b[2], u), sideX(z, y), v),
-            y + 0.003 * Math.sin(v * Math.PI),
+            lerp(x,side*sideX(z,y),v),
+            y,
             z,
           ];
         },
@@ -691,9 +703,9 @@ function addCabin(group, p, m, id, sideX) {
       [0, 1, 0],
     );
     const perimeter = [
-      p.windshield.bottom.slice(0, 2),
-      ...p.roof.map(([z, y]) => [z, y - 0.025]),
-      p.rearWindow.bottom.slice(0, 2),
+      [p.windshield.bottom[0],glassPoint(p.windshield,1,0)[1]],
+      ...Array.from({length:49},(_,i)=>{const z=lerp(p.roof[0][0],p.roof.at(-1)[0],i/48);return[z,sample(p.roof,z,1)-.025];}),
+      [p.rearWindow.bottom[0],glassPoint(p.rearWindow,1,0)[1]],
       ...p.body
         .filter(
           ([z]) => z > p.windshield.bottom[0] && z < p.rearWindow.bottom[0],
@@ -709,7 +721,7 @@ function addCabin(group, p, m, id, sideX) {
       "painted-cabin-side",
       perimeter,
       m.paint,
-      (z, y) => point([z, y], -0.003),
+      (z, y) => point([z, y]),
       [side, 0, 0],
       windows,
       2,
@@ -720,15 +732,20 @@ function addCabin(group, p, m, id, sideX) {
         `side-window-${side}-${i}`,
         poly,
         i === 0 ? m.sideGlass : m.privacy,
-        (z, y) => point([z, y], 0.004),
+        (z, y) => point([z, y], 0.001),
         [side, 0, 0],
       );
       pane.castShadow = false;
       pane.receiveShadow = false;
+      // Automotive side panes have one broad reflection. Small roof-profile
+      // knots must not make the glazing look like wrinkled sheet metal.
+      const normals=pane.geometry.getAttribute('normal'),average=new T.Vector3();
+      for(let n=0;n<normals.count;n++)average.add(new T.Vector3().fromBufferAttribute(normals,n));
+      average.normalize();for(let n=0;n<normals.count;n++)normals.setXYZ(n,average.x,average.y,average.z);
       tube(
         group,
         "window-rubber",
-        poly.map((v) => point(v, 0.006)),
+        poly.map((v) => point(v, 0.002)),
         0.004,
         m.piano,
         true,
@@ -742,11 +759,7 @@ function addCabin(group, p, m, id, sideX) {
       "windscreen-edge-seal",
       Array.from({ length: 18 }, (_, i) => {
         const t = i / 17;
-        return [
-          side * lerp(a.bottom[2], a.top[2], t),
-          lerp(a.bottom[1], a.top[1], t),
-          lerp(a.bottom[0], a.top[0], t),
-        ];
+        return glassPoint(a,side,t);
       }),
       0.005,
       m.black,
@@ -785,11 +798,7 @@ function addCabin(group, p, m, id, sideX) {
       "rear-glass-edge-seal",
       Array.from({ length: 18 }, (_, i) => {
         const t = i / 17;
-        return [
-          side * lerp(d.bottom[2], d.top[2], t),
-          lerp(d.bottom[1], d.top[1], t),
-          lerp(d.bottom[0], d.top[0], t),
-        ];
+        return glassPoint(d,side,t);
       }),
       0.005,
       m.black,
@@ -799,13 +808,13 @@ function addCabin(group, p, m, id, sideX) {
     group,
     "interior-dash",
     [1.5, 0.13, 0.42],
-    [0, id === "alphard" ? 1.12 : 0.84, id === "alphard" ? -1.3 : -0.86],
+    [0, id === "alphard" ? 1.12 : id==='cx5'?1.02:0.84, id === "alphard" ? -1.3 : -0.86],
     m.black,
     0.055,
   );
   for (const side of [-1, 1])
     for (const row of [0, 1]) {
-      const y = id === "alphard" ? 1.14 : 0.84,
+      const y = id === "alphard" ? 1.14 : id==='cx5'?1.02:0.84,
         z =
           (id === "alphard" ? -0.35 : -0.12) +
           row * (id === "alphard" ? 0.92 : 0.83);
@@ -834,7 +843,7 @@ function addCabin(group, p, m, id, sideX) {
   );
   wheel.position.set(
     0.41,
-    id === "alphard" ? 1.19 : 0.96,
+    id === "alphard" ? 1.19 : id==='cx5'?1.14:0.96,
     id === "alphard" ? -0.99 : -0.65,
   );
   wheel.rotation.x = -0.3;
@@ -908,7 +917,38 @@ function addFront(group, m, id, noseZ) {
       closed,
     );
   };
-  if (id === "alphard") {
+  if (id === 'i30' || id === 'cx5') {
+    const suv=id==='cx5',top=suv?1.005:.80,bottom=suv?.58:.36;
+    const outline=[[-.62,top],[.62,top],[.65,top-.1],[.46,bottom],[-.46,bottom],[-.65,top-.1]];
+    patch(id+'-grille-recess',outline,m.piano,.002);
+    line(id+'-grille-surround',outline,.008,m.chrome,true);
+    for(let row=0;row<(suv?7:5);row++){
+      const y=lerp(bottom+.035,top-.03,row/(suv?6:4)),w=lerp(.44,.59,(y-bottom)/(top-bottom));
+      if(!suv)line('i30-grille-ribbon',[[-w,y],[0,y+.018],[w,y]],.009,m.darkChrome);
+      for(let col=-5;col<=5;col++){
+        const x=col*w/5;
+        line(id+'-grille-mesh',[[x-.019,y-.012],[x+.019,y+.012]],suv?.003:.006,suv?m.darkChrome:m.chrome);
+      }
+    }
+    patch(id+'-lower-intake',[[-.59,.31],[.59,.31],[.51,.235],[-.51,.235]],m.black,.004);
+    for(const side of [-1,1]){
+      const shape=(suv?[[.45,1.015],[.83,1.09],[.883,1.06],[.82,.995],[.5,.98]]:
+        [[.40,.805],[.75,.91],[.865,.93],[.84,.825],[.66,.775],[.48,.775]]).map(([x,y])=>[side*x,y]);
+      patch(id+'-headlamp',shape,m.piano,.003);
+      line(id+'-lamp-seal',shape,.003,m.piano,true);
+      for(const xx of (suv?[.64,.75]:[.65])){
+        const yy=suv?1.025:.832;
+        patch('projector-black-inset',[[xx-.045,yy-.025],[xx+.045,yy-.025],[xx+.045,yy+.025],[xx-.045,yy+.025]].map(([x,y])=>[side*x,y]),m.piano,.007);
+        line('LED-projector-edge',[[side*(xx-.032),yy+.018],[side*(xx-.032),yy-.015],[side*(xx+.032),yy-.015]],.004,m.led);
+      }
+      line(id+'-daytime-light',(suv?[[.48,.99],[.82,1.00]]:[[.45,.79],[.65,.787],[.81,.83]]).map(([x,y])=>[side*x,y]),.004,m.led);
+      if(!suv){
+        patch('i30-corner-vent',[[.70,.56],[.85,.43],[.82,.32],[.63,.37]].map(([x,y])=>[side*x,y]),m.piano,.002);
+        for(let j=0;j<3;j++)line('i30-corner-DRL',[[side*.70,.40+j*.034],[side*.80,.42+j*.027]],.006,m.lens);
+      }
+    }
+    rentalEmblem(group,id,0,suv?.905:.735,zAt(0,suv?.905:.735)-.015,m);
+  } else if (id === "alphard") {
     const grille = [
       [-0.68, 1.035],
       [0.68, 1.035],
@@ -1115,7 +1155,20 @@ function addRear(group, p, m, id, rear, rearZ) {
       r,
       mat,
     );
-  if (id === "alphard") {
+  if (id === 'i30' || id === 'cx5') {
+    const suv=id==='cx5', y=suv?1.16:1.015;
+    for(const side of [-1,1]) {
+      const shape=[[.39,y+.018],[.72,y+.075],[.85,y+.04],[.82,y-.055],[.54,y-.065],[.42,y-.025]].map(([x,y])=>[side*x,y]);
+      patch(id+'-tail-lamp',shape,m.red,.004);
+      line(id+'-rear-light-signature',[[side*.43,y],[side*.70,y+.04],[side*.81,y+.01]],.008,m.red);
+      line('rear-clear-strip',[[side*.48,y-.026],[side*.70,y-.016]],.005,m.lens);
+      line('bumper-reflector',[[side*.70,.37],[side*.80,.41]],.011,m.red);
+    }
+    const z=p.roof.at(-1)[0],ry=sample(p.roof,z,1);
+    box(group,id+'-roof-spoiler',[1.34,.035,.17],[0,ry-.02,z+.045],m.paint,.016);
+    box(group,'high-mounted-stop-light',[.31,.016,.018],[0,ry-.037,z+.14],m.red,.005);
+    rentalEmblem(group,id,0,y+.02,rearZ(0,y+.02)+.017,m,true);
+  } else if (id === "alphard") {
     patch(
       "rear-black-garnish",
       [
@@ -1161,7 +1214,7 @@ function addRear(group, p, m, id, rear, rearZ) {
       group,
       "roof-spoiler",
       [1.56, 0.055, 0.3],
-      [0, 1.895, rear - 0.17],
+      [0, 1.865, p.roof.at(-1)[0]+.06],
       m.paint,
       0.025,
     );
@@ -1169,7 +1222,7 @@ function addRear(group, p, m, id, rear, rearZ) {
       group,
       "high-mounted-stop-light",
       [0.38, 0.025, 0.025],
-      [0, 1.87, rear - 0.001],
+      [0, 1.843, p.roof.at(-1)[0]+.214],
       m.red,
       0.008,
     );
@@ -1335,7 +1388,7 @@ export function makeCarModel(id = "prius", paint) {
   const sideX = (z, y) => {
     const b = belt(z),
       h = halfWidth(z);
-    const shoulder = 0.1,
+    const shoulder = id === "alphard" ? 0.065 : 0.055,
       roofHeight = sample(p.roof, z, 1),
       roofWidth = sample(p.roof, z, 2);
     if (y > b) {
@@ -1594,14 +1647,16 @@ export function makeCarModel(id = "prius", paint) {
       y = belt(z) + 0.09;
     mirror.position.set(side * (car.width / 2 + 0.085), y, z);
     mirror.name = "door-mirror-" + side;
+    const anchor=side*(sideX(z,y-.035)-.012)-mirror.position.x;
     box(
       mirror,
       "mirror-stalk",
-      [0.15, 0.05, 0.08],
-      [-side * 0.1, -0.035, 0.035],
+      [Math.abs(anchor)+.025, 0.055, 0.105],
+      [anchor/2, -0.035, 0.022],
       m.piano,
       0.02,
     );
+    box(mirror,'mirror-door-mount',[.035,.09,.14],[anchor,-.026,.023],m.piano,.014);
     box(
       mirror,
       "mirror-lower-housing",

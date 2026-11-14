@@ -367,11 +367,11 @@ function makeWheel(root, car, cfg, mats) {
   const logo = new T.Group();
   logo.position.set(0, 0.003, 0.042);
   wheel.add(logo);
-  for (const [rx, ry, dy] of [
+  for (const [rx, ry, dy] of (car.id==='i30'||car.id==='cx5'?[[.023,.015,0]]:[
     [0.023, 0.015, 0],
     [0.008, 0.015, 0],
     [0.017, 0.006, 0.005],
-  ]) {
+  ])) {
     const pts = [];
     for (let i = 0; i <= 64; i++) {
       const a = (i / 64) * Math.PI * 2;
@@ -379,6 +379,8 @@ function makeWheel(root, car, cfg, mats) {
     }
     tube(logo, pts, 0.0012, mats.silver);
   }
+  if(car.id==='i30')for(const pts of [[[-.013,-.009,0],[-.005,.01,0]],[[.005,-.01,0],[.013,.009,0]],[[-.008,0,0],[.008,0,0]]])tube(logo,pts,.0014,mats.silver);
+  if(car.id==='cx5')tube(logo,[[-.020,.006,0],[-.01,.003,0],[0,-.009,0],[.01,.003,0],[.020,.006,0]],.0013,mats.silver);
   face(
     wheel,
     0.05,
@@ -429,7 +431,34 @@ function makeWheel(root, car, cfg, mats) {
   return wheel;
 }
 
+function rentalCenterStack(root,car,cfg,mats,navTexture) {
+  const group=new T.Group(),suv=car.id==='cx5';group.name=car.id+'-center-stack';
+  group.position.set(cfg.screenX,car.eyeHeight-cfg.screenDrop,cfg.screenZ);root.add(group);
+  const w=cfg.screenWidth,h=cfg.screenHeight;
+  rounded(group,[w+.027,h+.025,.027],[0,0,-.012],mats.black,.012);
+  rounded(group,[w*.65,.06,.05],[0,-h/2-.028,-.035],mats.soft,.01);
+  const navigation=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:navTexture}));
+  navigation.name='live-navigation-display';navigation.position.z=.008;group.add(navigation);
+  // Separate tablet, centre air vents and physical climate panel; no Prius shifter fascia.
+  const vy=-.128,cz=suv?.14:.065;
+  for(const side of [-1,1]){
+    rounded(group,[.105,.038,.042],[side*.071,vy,cz],mats.black,.01);
+    for(let i=-1;i<=1;i++)rounded(group,[.088,.002,.011],[side*.071,vy+i*.009,cz+.023],mats.silver,.001);
+  }
+  face(group,.019,.023,[0,vy,cz+.025],texture(80,80,c=>{c.fillStyle='#101319';c.fillRect(0,0,80,80);c.strokeStyle='#b94343';c.lineWidth=5;c.beginPath();c.moveTo(40,20);c.lineTo(62,59);c.lineTo(18,59);c.closePath();c.stroke();}));
+  rounded(group,[.28,.068,.06],[0,-.255,cz+.065],mats.black,.013);
+  const climate=face(group,.165,.045,[0,-.255,cz+.098],texture(500,140,c=>{c.fillStyle='#10151b';c.fillRect(0,0,500,140);c.fillStyle='#d8e6eb';c.font='31px Arial';c.textAlign='center';c.fillText('22.0    AUTO    22.0',250,57);c.font='22px Arial';c.fillText('A/C     ↗     FRONT',250,110);}));
+  climate.name='physical-climate-controls';
+  for(const side of [-1,1])knob(group,side*.113,-.255,cz+.107,.020,mats.rubber,mats.silver);
+  rounded(root,[.30,.16,.55],[0,car.eyeHeight-.65,-.23],mats.soft,.035);
+  rounded(root,[.19,.026,.27],[0,car.eyeHeight-.56,-.26],mats.black,.016);
+  const shifter=rounded(root,[.044,.12,.045],[-.045,car.eyeHeight-.52,-.31],mats.wheelLeather,.018);
+  shifter.rotation.x=-.17;
+  if(suv){knob(root,.075,car.eyeHeight-.54,-.09,.025,mats.black,mats.silver);}
+  return {navigation,navigationAnchor:new T.Vector3(cfg.screenX,car.eyeHeight-cfg.screenDrop,cfg.screenZ)};
+}
 function makeCenterStack(root, car, cfg, mats, navTexture) {
+  if(car.id==='i30'||car.id==='cx5')return rentalCenterStack(root,car,cfg,mats,navTexture);
   const tall = car.id === "alphard",
     eye = car.eyeHeight,
     group = new T.Group();
@@ -741,7 +770,7 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
       const front = z > -0.8 ? 1 : 0;
       positions.push(
         x,
-        eye + y + (tall ? 0.012 : 0.018) * driver - (z > -0.97 ? 0.235 : 0) * recess,
+        eye + y + (tall ? 0.012 : 0.018) * driver - (z > -0.97 ? (car.id==='prius'||tall?.235:.06) : 0) * recess,
         z + (tall ? 0.055 : 0.025) * center * front + 0.045 * Math.cos(((x / half) * Math.PI) / 2) * front,
       );
     }
@@ -820,7 +849,7 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
     mz = cfg.meterZ,
     mw = cfg.meterWidth,
     mh = cfg.meterHeight;
-  if (tall) {
+  if (car.id !== 'prius') {
     const hood = polygon(
       root,
       [
@@ -839,7 +868,7 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
       mats.wheelLeather,
       0.009,
     );
-    hood.name = "alphard-instrument-binnacle";
+    hood.name = car.id+"-instrument-binnacle";
     stitch(
       root,
       [
@@ -894,7 +923,7 @@ export function buildCockpit({ parent, car, navTexture, meterTexture }) {
   }
   const meter = new T.Mesh(new T.PlaneGeometry(mw, mh), new T.MeshBasicMaterial({ map: meterTexture }));
   meter.name = "live-instrument-display";
-  meter.position.set(mx, my, mz + (tall ? 0.065 : 0.031));
+  meter.position.set(mx, my, mz + (car.id !== 'prius' ? 0.065 : 0.031));
   root.add(meter);
   // Each console follows its reference: Alphard's broad glossy tunnel and
   // Prius's narrow armrest with its shifter on the white centre fascia.

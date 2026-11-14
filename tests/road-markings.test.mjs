@@ -5,7 +5,7 @@ import {projection} from '../map-data.mjs';
 import {courseParking} from '../courses.mjs';
 import {prepareSignalLayouts} from '../junctions.mjs';
 import {approachMarkings,maneuverGuides} from '../road-markings.mjs';
-import {distance,insidePolygon,signalPhase,signalRightArrow} from '../simulation.mjs';
+import {distance,insidePolygon,signalPhase,signalRightArrow,signalTurnPhase} from '../simulation.mjs';
 
 test('stop lines stay in the incoming lane and before the pedestrian crossing',()=>{
  const roads=[{id:'ns',points:[{x:0,y:80},{x:0,y:0},{x:0,y:-80}],tags:{width:'7'}},{id:'ew',points:[{x:-80,y:0},{x:0,y:0},{x:80,y:0}],tags:{width:'12'}}];
@@ -50,5 +50,18 @@ test('right and U-turn guidance follows the route with finite lane-aware geometr
   const route=[{x:0,y:50},{x:0,y:0},{x:50,y:0}],steps=[{atDistance:50,maneuver:{type:'turn',modifier}}],roads=[{points:route,tags:{width:'7'}}];
   const [g]=maneuverGuides(route,steps,roads);assert.equal(g.modifier,modifier);assert.ok(g.position.y>0&&g.position.x<0);
   assert.ok(g.path.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+ }
+});
+
+test('NSW and NZ use red turn arrows during opposing green, then a separate yellow arrow',()=>{
+ for(const country of ['AU','NZ']){
+  const s={id:'overseas-arrow',profile:'arrow',axis:0,country};let green=0,yellow=0,red=0;
+  for(let t=0;t<120;t+=.1){
+   const main=signalPhase(s,0,t),turn=signalTurnPhase(s,0,t);
+   if(main==='green'){assert.equal(turn,'red');red++;}
+   if(turn==='green'){assert.equal(main,'red');green++;}
+   if(turn==='yellow'){assert.equal(main,'red');yellow++;}
+  }
+  assert.ok(green&&yellow&&red);
  }
 });

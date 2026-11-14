@@ -41,7 +41,7 @@ for(const def of defs){
   parking={type:'area',name:def.finishLabel,polygon:selected.parking.geometry.map(p=>[p.lon,p.lat]),osmId:selected.parking.id};
   def.practice=route.practice;def.parkingId=selected.parking.id;
   def.features.push(`좌회전 ${route.practice.left}회`,`우회전 ${route.practice.right}회`,'목표면 주차');
-  def.terrainNote='도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경';
+  def.terrainNote='실제 지도·표고와 거리 사진을 참고한 연습 환경';
  } else if(def.training){
   route=structuredClone(training.routes.find(r=>r.name===def.training).data.routes[0]);
   raw=sources.motobu;
@@ -154,4 +154,4 @@ for(const def of defs){
 // every existing Japan course. Country is a label, never a required step.
 const groups=['JP','AU','NZ'].map(code=>defs.filter(c=>c.country===code));
 const ordered=[];for(let i=0;i<Math.max(...groups.map(g=>g.length));i++)for(const group of groups)if(group[i])ordered.push(group[i]);
-await writeFile('data/driving-courses.json',JSON.stringify({version:2,note:'실제 지도 형태를 바탕으로 구성한 짧은 연습 코스. 교통과 신호 주기, 주차면은 연습용이며 실제 여행 경로가 아닙니다. 호주·뉴질랜드 코스의 표고는 평탄화했으며 외벽·수목은 대표적인 자체 모델입니다.',courses:ordered},null,2));
+await writeFile('data/driving-courses.json',JSON.stringify({version:3,note:'실제 지도와 표고를 바탕으로 구성한 짧은 연습 코스. 교통·신호 주기·주차면은 연습용입니다. 외벽·수목은 지역 거리 사진을 참고한 자체 모델이며 사진 측량 재현은 아닙니다.',courses:ordered},null,2));

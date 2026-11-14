@@ -31,9 +31,14 @@ export const COUNTRIES = Object.freeze({
 export const countryProfile = (code = "JP") => COUNTRIES[code] || COUNTRIES.JP;
 export const courseLocation = (course) =>
   `${countryProfile(course?.country).name} · ${course?.region || ""}`;
-export function signalLensPositions(country = "JP") {
+export function signalAppearance(country='JP',region='') {
+  const snow=country==='JP'&&/sapporo|삿포로|홋카이도/i.test(region);
+  return {vertical:country!=='JP'||snow,backboard:country!=='JP',threeArrows:country!=='JP',
+    housing:country==='JP'?'#adb6b8':'#171c20',pole:country==='NZ'?'#e6b62c':'#737e80',snow};
+}
+export function signalLensPositions(country = "JP",region='') {
   // Kept in green/yellow/red order for the shared traffic controller.
-  return countryProfile(country).signalLayout === "vertical"
+  return signalAppearance(country,region).vertical
     ? [
         [0, -0.43],
         [0, 0],

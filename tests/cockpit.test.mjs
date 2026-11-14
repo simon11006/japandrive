@@ -63,9 +63,10 @@ for (const car of VEHICLES)
         "the supplied Prius has a white fascia-mounted shifter panel",
       );
       assert.ok(parent.getObjectByName("prius-vertical-center-stack"));
-    } else
+    } else if (car.id === "alphard")
       assert.ok(
         parent.getObjectByName("integrated-climate-controls"),
         "Alphard climate controls are below the map in the same centre panel",
       );
+    else {assert.ok(parent.getObjectByName("physical-climate-controls"));assert.ok(parent.getObjectByName(car.id+"-center-stack"));}
   });

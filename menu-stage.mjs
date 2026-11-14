@@ -30,7 +30,7 @@ export class MenuStage {
           far: 20,
         });
         light.shadow.mapSize.set(2048, 2048);
-        light.shadow.normalBias = 0.025;
+        light.shadow.normalBias = 0.006;
         light.shadow.bias = -0.0002;
         light.shadow.radius = 3;
       }
@@ -89,6 +89,7 @@ export class MenuStage {
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.014;
     this.scene.add(shadow);
+    this.contactTexture=shadow.material.map;
   }
   prepareEnvironment(renderer) {
     if (this.studioEnvironment) return;
@@ -137,8 +138,12 @@ export class MenuStage {
       }
       this.carId = car.id;
       this.model = makeCarModel(car.id);
-      this.model.position.y = 0.015;
+      this.model.position.y = 0.01;
       this.scene.add(this.model);
+      for(const wheel of this.model.userData.wheels){
+        const patch=new THREE.Mesh(new THREE.PlaneGeometry(.40,.56),new THREE.MeshBasicMaterial({map:this.contactTexture.clone(),transparent:true,opacity:.95,depthWrite:false}));
+        patch.rotation.x=-Math.PI/2;patch.position.set(wheel.position.x,.001,wheel.position.z);patch.name='tyre-contact-shadow';this.model.add(patch);
+      }
     }
     const aspect = width / height,
       portrait = aspect < 0.85,

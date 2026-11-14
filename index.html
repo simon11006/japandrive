@@ -25,7 +25,7 @@
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.14</span><button id="fullscreen" data-fullscreen>전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.15</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -35,9 +35,9 @@
       <div class="title-letterbox top" aria-hidden="true"></div>
       <div class="title-letterbox bottom" aria-hidden="true"></div>
       <div class="title-logo">
-        <small class="title-eyebrow"><i></i> LEFT-SIDE DRIVING EXPERIENCE</small>
+        <small class="title-eyebrow"><i></i> LEFT-SIDE DRIVING PRACTICE</small>
         <h1>KEEP<span>LEFT<span class="title-arrow" aria-hidden="true">↖</span></span></h1>
-        <p class="title-tagline">왼쪽으로, 새로운 드라이브.</p>
+        <p class="title-tagline">좌측통행 운전 연습</p>
       </div>
       <button id="press-start" class="press-start"><span>드라이브를 시작하세요 <b>→</b></span><small>아무 키나 누르거나 터치하세요</small></button>
       <nav id="title-menu" class="title-menu" aria-label="메인 메뉴" hidden>
@@ -55,11 +55,11 @@
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.14</span>
+        <span class="title-version">TEST 0.15</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
-      <div class="menu-top"><span class="menu-wordmark">KEEP LEFT<span>DRIVING EXPERIENCE</span></span><button id="setup-help">플레이 가이드 <kbd>H</kbd></button></div>
+      <div class="menu-top"><span class="menu-wordmark">KEEP LEFT<span>DRIVING PRACTICE</span></span><button id="setup-help">플레이 가이드 <kbd>H</kbd></button></div>
       <div class="intro">
         <small id="step-caption">STEP 1 / 6</small>
         <h1 id="step-title" tabindex="-1">어디로 떠날까요?</h1>
@@ -77,7 +77,7 @@
       </section>
       <div id="regions" class="region-tabs"></div>
       <section class="vehicle-section" hidden>
-        <div class="garage-feature"><div class="garage-info"><small>TOYOTA / JAPAN SPEC</small><h2 id="garage-name">PRIUS</h2><p id="garage-description"></p><dl id="garage-specs"></dl></div><div class="garage-view" role="group" aria-label="차량 미리보기"><button data-garage-view="exterior" aria-pressed="true">외관</button><button data-garage-view="interior" aria-pressed="false">운전석</button></div></div>
+        <div class="garage-feature"><div class="garage-info"><small id="garage-brand">TOYOTA / RIGHT-HAND DRIVE</small><h2 id="garage-name">PRIUS</h2><p id="garage-description"></p><dl id="garage-specs"></dl></div><div class="garage-view" role="group" aria-label="차량 미리보기"><button data-garage-view="exterior" aria-pressed="true">외관</button><button data-garage-view="interior" aria-pressed="false">운전석</button></div></div>
         <div id="vehicles" class="vehicles" aria-label="차량 선택"></div>
       </section>
       <section id="planner" class="planner" hidden>
@@ -251,8 +251,8 @@
       </div>
     </footer>
     <div id="result" hidden></div>
-    <a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
-      >© OpenStreetMap 기여자 · 배경: 국토지리원</a
+    <a class="attribution" href="https://github.com/simon11006/japandrive/blob/main/WORLD-SCENERY.md" target="_blank" rel="noopener"
+      >© OpenStreetMap · GSI · Mapzen 지형</a
     >
     <div id="help" class="game-dialog manual" hidden>
       <div>
@@ -389,8 +389,7 @@
         <h2>실제 자료를 바탕으로</h2>
         <p class="fine">
           코스는 실제 지도를 참고해 만든 짧은 운전 연습용 구간입니다. 보행자·경찰관 배치와 일부 횡단보도는 운전 판단을 연습하도록 구성한 상황입니다. E58 코스는 실제 고속도로 선형을 일부 사용하고 진입·출구·요금소를 연습용으로 재구성했습니다. 실제 여행 경로 안내용이 아닙니다.<br />
-          도로·건물 위치: OpenStreetMap. 코스 주변 높이·해안선·바닥 참고: 국토지리원 표고·항공사진. 차량 크기:
-          토요타 공식 제원. 실내 배치와 색상: 첨부 사진·공식 사진.<br />건물 높이는 등록 높이·층수를 우선하고, 자료가 없는 높이와 외벽·상가·간판·식재·보도는 대표 형태로 추정해 표현했습니다. 현장 외관과 일치하는 사진 측량 모델이 아닙니다. 신호 주기·화살표·점멸 환경도 연습용으로 구성했습니다.<br />건물 높이 일부는 층수 기반 추정이고,
+          도로·건물·해안선: OpenStreetMap. 일본 높이·바닥: 국토지리원. 호주·뉴질랜드 지형: Mapzen Terrain Tiles. 차량 크기: 토요타·현대·마쓰다 공식 제원. 실내와 외관: 첨부 사진·공식 사진 참고.<br />건물 높이는 등록 높이·층수를 우선하고, 자료가 없는 높이와 외벽·상가·간판·식재·보도는 대표 형태로 추정해 표현했습니다. 현장 외관과 일치하는 사진 측량 모델이 아닙니다. 신호 주기·화살표·점멸 환경도 연습용으로 구성했습니다.<br />건물 높이 일부는 층수 기반 추정이고,
           외관과 실내 세부 치수는 단순화되어 있습니다. 주차면은 항공사진 판독값이며 현장 실측이 아닙니다. 지도
           갱신 및 현장 차이가 있을 수 있습니다. 교통량·신호 주기는 실제 실시간 정보가 아닙니다.
         </p>

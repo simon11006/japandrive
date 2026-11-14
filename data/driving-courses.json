@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "note": "실제 지도 형태를 바탕으로 구성한 짧은 연습 코스. 교통과 신호 주기, 주차면은 연습용이며 실제 여행 경로가 아닙니다. 호주·뉴질랜드 코스의 표고는 평탄화했으며 외벽·수목은 대표적인 자체 모델입니다.",
+  "version": 3,
+  "note": "실제 지도와 표고를 바탕으로 구성한 짧은 연습 코스. 교통·신호 주기·주차면은 연습용입니다. 외벽·수목은 지역 거리 사진을 참고한 자체 모델이며 사진 측량 재현은 아닙니다.",
   "courses": [
     {
       "id": "tokyo-shinjuku",
@@ -243,7 +243,7 @@
         "serviceMetres": 0
       },
       "parkingId": 524278849,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 1,
@@ -525,7 +525,7 @@
         "serviceMetres": 93
       },
       "parkingId": 23906889,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 2,
@@ -1032,7 +1032,7 @@
         151.186,
         -33.892
       ],
-      "style": "australia-town",
+      "style": "newtown",
       "theme": "urban",
       "name": "뉴타운 · 네이버후드",
       "category": "상점가·생활도로",
@@ -1071,7 +1071,7 @@
         "serviceMetres": 38
       },
       "parkingId": 617718917,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 2,
@@ -1206,7 +1206,7 @@
         174.807,
         -36.821
       ],
-      "style": "new-zealand-town",
+      "style": "devonport",
       "theme": "village",
       "name": "데번포트 · 첫 좌측통행",
       "category": "항구 생활도로",
@@ -1245,7 +1245,7 @@
         "serviceMetres": 48
       },
       "parkingId": 793137997,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 2,
@@ -1948,7 +1948,7 @@
         151.294,
         -33.789
       ],
-      "style": "australia-town",
+      "style": "manly",
       "theme": "coast",
       "name": "맨리 · 비치사이드",
       "category": "해변 마을",
@@ -1987,7 +1987,7 @@
         "serviceMetres": 0
       },
       "parkingId": 257432920,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 2,
@@ -2158,7 +2158,7 @@
         174.841,
         -36.843
       ],
-      "style": "new-zealand-town",
+      "style": "mission-bay",
       "theme": "coast",
       "name": "미션베이 · 워터프런트",
       "category": "해안 생활도로",
@@ -2197,7 +2197,7 @@
         "serviceMetres": 84
       },
       "parkingId": 887397604,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 2,
         "unsignalCrosswalks": 2,
@@ -2656,7 +2656,7 @@
         150.32,
         -33.707
       ],
-      "style": "australia-town",
+      "style": "katoomba",
       "theme": "mountain",
       "name": "카툼바 · 마운틴 타운",
       "category": "산악 지역 마을",
@@ -2695,7 +2695,7 @@
         "serviceMetres": 194
       },
       "parkingId": 843358180,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 1,
         "unsignalCrosswalks": 0,
@@ -2894,7 +2894,7 @@
         168.672,
         -45.025
       ],
-      "style": "new-zealand-town",
+      "style": "queenstown",
       "theme": "mountain",
       "name": "퀸스타운 · 레이크 타운",
       "category": "호숫가 산악 도시",
@@ -2933,7 +2933,7 @@
         "serviceMetres": 27
       },
       "parkingId": 839973909,
-      "terrainNote": "도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경",
+      "terrainNote": "실제 지도·표고와 거리 사진을 참고한 연습 환경",
       "situations": {
         "signalCrosswalks": 4,
         "unsignalCrosswalks": 1,

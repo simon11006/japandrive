@@ -40,16 +40,27 @@ export function prepareSignalLayouts(signals,roads){
       const n=nearestOnSegment(s,r.points[i-1],r.points[i]);if(n.distance<hit.distance)hit={...n,road:r,heading:headingBetween(r.points[i-1],r.points[i])};
     }
     const junction=junctions.filter(j=>distance(s,j)<35).sort((a,b)=>distance(s,a)-distance(s,b))[0];
-    if(junction){s.x=junction.x;s.y=junction.y;}
+    // A divided intersection is often a rectangle of 2–4 OSM junction nodes.
+    // Use every external incoming arm, not just the nearest corner's arms.
+    const cluster=junction?junctions.filter(j=>distance(j,junction)<23):[];
+    if(junction){s.x=cluster.reduce((n,j)=>n+j.x,0)/cluster.length;s.y=cluster.reduce((n,j)=>n+j.y,0)/cluster.length;}
     s.approachHeading=s.courseHeading??hit.heading??0;
     s.axis=s.approachHeading;
     const w=hit.road?roadWidth(hit.road.tags):7;
-    const arms=junction?.arms||[0,Math.PI].map(turn=>({heading:s.axis+turn,width:w,incoming:true,oneway:false}));
+    const arms=[];
+    for(const j of cluster)for(const arm of j.arms){
+      const f=forward(arm.heading),match=arms.find(a=>a.incoming===arm.incoming&&Math.abs(wrapAngle(a.heading-arm.heading))<.22);
+      // The outer/upstream corner places the stop line before the entire junction.
+      if(!match)arms.push({...arm,anchor:{x:j.x,y:j.y}});
+      else if(j.x*f.x+j.y*f.y<match.anchor.x*f.x+match.anchor.y*f.y)Object.assign(match,{...arm,anchor:{x:j.x,y:j.y}});
+    }
+    if(!arms.length)arms.push(...[0,Math.PI].map(turn=>({heading:s.axis+turn,width:w,incoming:true,oneway:false,anchor:s})));
     s.approaches=arms.filter(a=>a.incoming).map(a=>{
       const f=forward(a.heading),r={x:Math.cos(a.heading),y:Math.sin(a.heading)};
       const cross=arms.filter(b=>Math.abs(Math.sin(b.heading-a.heading))>.5);
       const setback=Math.max(8,...cross.map(b=>b.width/2+6));
-      const at=(along,side)=>({x:s.x+f.x*along+r.x*side,y:s.y+f.y*along+r.y*side});
+      const anchor=a.anchor||s,offset=(anchor.x-s.x)*r.x+(anchor.y-s.y)*r.y;
+      const at=(along,side)=>({x:anchor.x+f.x*along+r.x*side,y:anchor.y+f.y*along+r.y*side});
       const lane=a.oneway?0:-Math.min(1.65,a.width*.23),head=at(setback,lane);
       let pole,best=Infinity;
       for(const extra of [0,3,6,10,16])for(const lateral of [0,3,6,10,16,24])for(const side of [-1,1]){
@@ -62,7 +73,8 @@ export function prepareSignalLayouts(signals,roads){
         const p={x:head.x+Math.cos(i*Math.PI/16)*radius,y:head.y+Math.sin(i*Math.PI/16)*radius};
         if(clear(p,1)){pole=p;break;}
       }
-      return {...a,stopDistance:setback,stop:at(-setback,0),head,pole,lane};
+      const stop=at(-setback,0),stopDistance=(s.x-stop.x)*f.x+(s.y-stop.y)*f.y;
+      return {...a,offset,stopDistance,stop,head,pole,lane};
     });
   }
   synchronizeSignals(signals);

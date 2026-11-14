@@ -11,10 +11,19 @@ export const CITY_STYLES={
  sapporo:{colors:['#c8b8a4','#b3b9bd','#d9d8d2','#b6c1c7','#c0c5c5','#a59485'],levels:5,glass:true,trees:true,shops:['珈琲','ラーメン','薬局','レストラン','書店','OFFICE']},
  okinawa:{colors:['#ece8da','#e2dccb','#d9d8d0','#efe9e0','#d6cfbd','#e8e4dc'],levels:3,glass:false,trees:true,shops:['食堂','COFFEE','商店','駐車場','薬局','沖縄そば']},
 };
+Object.assign(CITY_STYLES,{
+ newtown:{...CITY_STYLES['australia-town'],levels:2},
+ manly:{...CITY_STYLES['australia-town'],levels:4,undergroundPower:true},
+ katoomba:{...CITY_STYLES['australia-town'],levels:2},
+ devonport:{...CITY_STYLES['new-zealand-town'],levels:2},
+ 'mission-bay':{...CITY_STYLES['new-zealand-town'],levels:2,undergroundPower:true},
+ queenstown:{...CITY_STYLES['new-zealand-town'],levels:3,undergroundPower:true},
+});
 export function buildingHeight(feature,style,seed,urban){
  const levels=Number(feature.tags['building:levels']);
  if(feature.height>0)return feature.height;
  if(levels>0)return levels*3.1;
+ if(/house|detached|terrace|bungalow/.test(feature.tags.building||''))return (seed%4===0?2:1)*3.1;
  const profile=CITY_STYLES[style]||CITY_STYLES.okinawa;
  return (style==='kyoto'?1+seed%3:urban?2+seed%profile.levels:1+seed%3)*3.1;
 }

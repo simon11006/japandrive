@@ -24,15 +24,15 @@ test('traffic waits at a visible red, then each of four approaches clears the ju
   const car=sim.cars[i];car.edge=arrivals[i];car.along=car.edge.length-28;car.speed=0;sim.place(car);
   car.next=car.edge.to.out.find(e=>Math.abs(wrapAngle(e.heading-car.heading))<.1);
  }
- const passed=new Set(),waited=new Set();let violations=0;
+ const passed=new Set(),waited=new Set(),original=new Set(sim.cars.map(c=>c.id));let violations=0;
  for(let tick=0;tick<1400;tick++){
-  const time=tick*.1,before=sim.cars.map(c=>({...c}));sim.tick(.1,time,{x:999,y:999});
-  sim.cars.forEach((c,i)=>{
-   if(passed.has(i))return;
-   const a=s.approaches.find(a=>Math.abs(wrapAngle(a.heading-before[i].heading))<.1);
+  const time=tick*.1,before=new Map(sim.cars.map(c=>[c.id,{...c}]));sim.tick(.1,time,{x:999,y:999});
+  sim.cars.forEach(c=>{
+   const i=c.id;if(!original.has(i)||passed.has(i)||!before.has(i))return;
+   const a=s.approaches.find(a=>Math.abs(wrapAngle(a.heading-before.get(i).heading))<.1);
    if(!a)return;
    const line=d=>((s.x-d.x)*Math.sin(a.heading)-(s.y-d.y)*Math.cos(a.heading))-a.stopDistance-c.length/2;
-   if(signalPhase(s,a.heading,time)==='red'&&line(before[i])>=0&&line(c)<-.2)violations++;
+   if(signalPhase(s,a.heading,time)==='red'&&line(before.get(i))>=0&&line(c)<-.2)violations++;
    if(c.speed<.1&&line(c)<5&&signalPhase(s,a.heading,time)==='red')waited.add(i);
    if(c.edge.from.x===0&&c.edge.from.y===0&&c.along>20)passed.add(i);
   });
@@ -43,6 +43,34 @@ test('traffic waits at a visible red, then each of four approaches clears the ju
 test('linked arrow and ordinary signal nodes share one compatible timing programme',()=>{
  const signals=synchronizeSignals([{id:'a',x:0,y:0,profile:'standard',approachHeading:0},{id:'b',x:12,y:5,profile:'arrow',approachHeading:Math.PI/2}]);
  for(let t=0;t<160;t+=.2)assert.ok(!(signalPhase(signals[0],0,t)==='green'&&signalPhase(signals[1],Math.PI/2,t)==='green'));
+});
+test('a divided intersection controls all four incoming carriageways, not just one corner',()=>{
+ const roads=[
+  {id:'north',tags:{highway:'primary',lanes:'1',oneway:'yes'},points:[{x:-6,y:100},{x:-6,y:6},{x:-6,y:-6},{x:-6,y:-100}]},
+  {id:'south',tags:{highway:'primary',lanes:'1',oneway:'yes'},points:[{x:6,y:-100},{x:6,y:-6},{x:6,y:6},{x:6,y:100}]},
+  {id:'east',tags:{highway:'primary',lanes:'1',oneway:'yes'},points:[{x:-100,y:-6},{x:-6,y:-6},{x:6,y:-6},{x:100,y:-6}]},
+  {id:'west',tags:{highway:'primary',lanes:'1',oneway:'yes'},points:[{x:100,y:6},{x:6,y:6},{x:-6,y:6},{x:-100,y:6}]},
+ ];
+ const [signal]=prepareSignalLayouts([{id:'divided',x:-6,y:6}],roads);
+ assert.equal(signal.approaches.length,4);
+ for(const heading of [0,Math.PI/2,Math.PI,-Math.PI/2]){
+  const a=signal.approaches.find(a=>Math.abs(wrapAngle(a.heading-heading))<.1);
+  assert.ok(a,'every approach has a visible light');
+  assert.ok(a.stopDistance>12,'stop line is before both carriageways');
+  assert.ok(roadClearance(a.pole,roads)>=1,'support is outside the road');
+ }
+});
+test('dense Auckland traffic continues to circulate across multiple signal cycles',async()=>{
+ const b=JSON.parse(await readFile(new URL('../data/courses/nz-auckland.json',import.meta.url),'utf8')),p=projection(b.origin),roads=courseRoadStore(b,p).roads;
+ const signals=prepareSignalLayouts(b.signals.map(s=>({...s,country:b.country,...p.toLocal([s.lon,s.lat])})),roads);
+ const sim=new TrafficSimulation(roads,signals,p.toLocal(b.route.geometry.coordinates[0]),80),lastMoved=new Map();
+ for(let tick=0;tick<1800;tick++){
+  const before=new Map(sim.cars.map(c=>[c.id,{x:c.x,y:c.y}])),time=tick*.1;
+  sim.tick(.1,time,{x:99999,y:99999});
+  for(const c of sim.cars)if(!lastMoved.has(c.id)||distance(c,before.get(c.id)||c)>.01)lastMoved.set(c.id,time);
+ }
+ assert.equal(sim.cars.length,80,'traffic remains at the selected density');
+ assert.ok(sim.cars.filter(c=>lastMoved.get(c.id)>=120).length>=72,'at least 90% of the fleet moves in the last minute; ordinary queues are allowed');
 });
 test('Tokyo traffic cannot jump into a parked player when it changes edges or lanes',async()=>{
  const b=JSON.parse(await readFile(new URL('../data/courses/tokyo-shinjuku.json',import.meta.url),'utf8')),p=projection(b.origin),roads=courseRoadStore(b,p).roads;
