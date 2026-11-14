@@ -1,5 +1,9 @@
 // Architectural treatments are representative; mapped outlines/heights win.
 export const CITY_STYLES={
+ sydney:{colors:['#d1c9b8','#aaaeb5','#b6c8cf','#9eafa9','#d9cbb3','#acb8bf'],levels:9,glass:true,trees:true,undergroundPower:true,shops:['COFFEE','BOOKSHOP','PHARMACY','BAKERY','GROCER','OFFICE']},
+ auckland:{colors:['#d0cfc8','#adc3ca','#afb5b6','#c4b8a6','#ddd7c8','#8a9ca2'],levels:7,glass:true,trees:true,undergroundPower:true,shops:['CAFE','BOOKS','PHARMACY','BAKERY','MARKET','OFFICE']},
+ 'australia-town':{colors:['#ad7866','#ccb89e','#e0d9c7','#ac9f8c','#bd8a75','#d8cbb7'],levels:3,glass:false,trees:true,pitched:true,shops:['CAFE','BAKERY','GROCER','BOOKS','PHARMACY','LOCAL SHOP']},
+ 'new-zealand-town':{colors:['#dddcd2','#c7c0b2','#adbec1','#d3c5b2','#b3b7ad','#dad2c2'],levels:2,glass:false,trees:true,pitched:true,shops:['CAFE','BAKERY','DAIRY','BOOKSHOP','PHARMACY','LOCAL SHOP']},
  tokyo:{colors:['#b6c0c7','#a9b4bc','#d1d4d3','#8e9da5','#c8c6be','#b9c6ca'],levels:6,glass:true,trees:true,shops:['カフェ','書店','薬局','レストラン','コンビニ','OFFICE']},
  osaka:{colors:['#bfc3c4','#d1c3af','#a9b0b4','#d9d5c8','#b9b2a8','#929fa5'],levels:5,glass:true,trees:true,shops:['喫茶','食堂','薬局','うどん','商店','OFFICE']},
  fukuoka:{colors:['#d5d0c3','#acb8be','#c7c9c6','#d6c0ac','#9faeb8','#d8d9d1'],levels:5,glass:true,trees:true,shops:['ラーメン','カフェ','薬局','うどん','書店','OFFICE']},

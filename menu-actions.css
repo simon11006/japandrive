@@ -1,4 +1,7 @@
 /* Keep the decision and its next action together, inside a readable width. */
+.course-scope {display:block;color:#9db1bf;font-size:11px;line-height:1.5;margin-top:8px;}
+.course-region {line-height:1.5;overflow-wrap:anywhere;}
+#game-about {display:inline-block;margin-top:16px;color:#d9f58a;font-size:13px;text-underline-offset:5px;}
 #select.game-ui {
   padding-inline: max(var(--menu-edge), calc((100vw - 1440px) / 2));
   grid-template-rows: 64px 70px minmax(0, 1fr) 110px;

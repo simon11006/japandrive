@@ -10,9 +10,10 @@ import {groundSurface,surfacePose} from '../road-surface.mjs';
 const read=async p=>JSON.parse(await readFile(new URL(p,import.meta.url),'utf8'));
 const catalog=await read('../data/driving-courses.json');
 const p=projection([127.68,26.214]);
-test('eleven short courses cover six regions with estimated minutes, stars and distinct situations',()=>{
- assert.equal(catalog.courses.length,11);assert.equal(new Set(catalog.courses.map(c=>c.id)).size,11);
- assert.deepEqual(new Set(catalog.courses.map(c=>c.region)),new Set(['도쿄','오사카','후쿠오카','교토','삿포로','오키나와']));
+test('nineteen short courses retain Japan and add four real locations each in Australia and New Zealand',()=>{
+ assert.equal(catalog.courses.length,19);assert.equal(new Set(catalog.courses.map(c=>c.id)).size,19);
+ assert.deepEqual(new Set(catalog.courses.filter(c=>c.country==='JP').map(c=>c.region)),new Set(['도쿄','오사카','후쿠오카','교토','삿포로','오키나와']));
+ for(const code of ['AU','NZ'])assert.equal(catalog.courses.filter(c=>c.country===code).length,4);
  for(const c of catalog.courses){assert.ok(c.region);assert.ok(c.minutes[1]<=10&&c.minutes[0]>0);assert.ok(c.stars>=1&&c.stars<=5);assert.ok(c.features.length>=3);assert.ok(c.distance<3000);}
  assert.ok(catalog.courses.filter(c=>['city','urban'].includes(c.theme)).length>=2);
 });

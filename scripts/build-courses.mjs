@@ -5,6 +5,8 @@ import {HIGHWAYS,isSolidBuilding} from '../map-core.mjs';
 import {projection} from '../map-data.mjs';
 import {CITY_AREAS} from './city-areas.mjs';
 import {CITY_COURSES} from './city-course-definitions.mjs';
+import {WORLD_AREAS} from './world-course-definitions.mjs';
+import {worldCourseRoute} from './world-course-route.mjs';
 import {buildRoadGraph,wrapAngle} from '../simulation.mjs';
 import {practiceRoute} from './practice-route.mjs';
 import {prepareSignalLayouts} from '../junctions.mjs';
@@ -15,7 +17,7 @@ let proj=projection([127.68,26.214]);
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const length=cs=>cs.slice(1).reduce((s,p,i)=>s+dist(proj.toLocal(p),proj.toLocal(cs[i])),0);
 const sources={};
-for(const id of ['naha','chatan','onna','motobu',...CITY_AREAS.map(c=>c.id)]) sources[id]=await read(`data/course-sources/${id}-geometry.json`);
+for(const id of ['naha','chatan','onna','motobu',...CITY_AREAS.map(c=>c.id),...WORLD_AREAS.map(c=>c.id)]) sources[id]=await read(`data/course-sources/${id}-geometry.json`);
 const training=await read('data/training-routes.json');
 const defs=[
  ...CITY_COURSES,
@@ -27,13 +29,20 @@ const defs=[
  {id:'e58-express',area:'expressway',name:'E58 · 하이웨이 런',theme:'expressway',category:'고속도로',subtitle:'요금소부터 합류, 차간 거리와 출구 감속까지',stars:4,minutes:[7,9],pace:65,features:['ETC·일반 요금소','가속 차로 합류','고속 주행','출구·주차'],assessment:['고속 주행과 차간 거리','합류·분기','입구·출구 요금소 통과'],startLabel:'고속도로 진입 준비 구간',finishLabel:'출구 휴게 주차장'}
 ];
 await mkdir('data/courses',{recursive:true});
+for(const area of WORLD_AREAS)defs.push({...area,id:`${area.country.toLowerCase()}-${area.id}`,area:area.id,world:true,pace:25,minutes:[4,7],subtitle:'실제 거리의 교차로를 연결하며 좌측통행과 회전 후 차로를 익히세요.',startLabel:`${area.region} 출발점`,finishLabel:`${area.region} 목표 주차장`,assessment:['회전 후 왼쪽 차로 진입','대향차와 보행자에게 양보','목표면 안에 완전히 주차']});
 function nearest(p,cs){let best=Infinity;for(let i=1;i<cs.length;i++){const a=cs[i-1],b=cs[i],dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));best=Math.min(best,Math.hypot(p.x-a.x-dx*t,p.y-a.y-dy*t));}return best;}
 function routeSteps(cs){let travelled=0;const steps=[];for(let i=0;i<cs.length;i++){if(i)travelled+=dist(proj.toLocal(cs[i-1]),proj.toLocal(cs[i]));if(i===0||i===cs.length-1||i%12===0)steps.push({distance:0,name:'',maneuver:{type:i===0?'depart':i===cs.length-1?'arrive':'continue',modifier:'straight',location:cs[i]}});}return steps;}
 function rect(center,h,w,l){const f={x:Math.sin(h),y:-Math.cos(h)},r={x:Math.cos(h),y:Math.sin(h)};return [[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>proj.toGeo({x:center.x+r.x*a*w/2+f.x*b*l/2,y:center.y+r.y*a*w/2+f.y*b*l/2}));}
 for(const def of defs){
- const city=CITY_AREAS.find(c=>c.id===def.area),origin=city?.origin||[127.68,26.214];proj=projection(origin);
+ const city=[...CITY_AREAS,...WORLD_AREAS].find(c=>c.id===def.area),origin=city?.origin||[127.68,26.214];proj=projection(origin);
  let raw,route,parking,tolls=[];
- if(def.training){
+ if(def.world){
+  raw=sources[def.area];const selected=worldCourseRoute(city,raw);route=selected.route;
+  parking={type:'area',name:def.finishLabel,polygon:selected.parking.geometry.map(p=>[p.lon,p.lat]),osmId:selected.parking.id};
+  def.practice=route.practice;def.parkingId=selected.parking.id;
+  def.features.push(`좌회전 ${route.practice.left}회`,`우회전 ${route.practice.right}회`,'목표면 주차');
+  def.terrainNote='도로·건물 윤곽은 실제 지도, 표고는 평탄화한 연습 환경';
+ } else if(def.training){
   route=structuredClone(training.routes.find(r=>r.name===def.training).data.routes[0]);
   raw=sources.motobu;
   const p=await read('data/parking-sites.json');const s=p.spaces[1];
@@ -76,7 +85,7 @@ for(const def of defs){
   parking={type:'area',name:def.finishLabel,polygon:f.geometry.map(p=>[p.lon,p.lat])};
   route={distance:length(coords),duration,geometry:{type:'LineString',coordinates:coords},legs};
  }
- if(['city','urban','village'].includes(def.theme)){
+ if(!def.world&&['city','urban','village'].includes(def.theme)){
   const ways=raw.elements.filter(e=>e.type==='way'&&HIGHWAYS.has(e.tags?.highway)&&e.tags.tunnel!=='yes'&&!(Number(e.tags.layer)<0));
   route=practiceRoute(ways,route.geometry.coordinates.at(-1),{seed:defs.indexOf(def)+1,...(def.theme==='village'?{min:350,max:700,turns:1}:{})});
   def.practice=route.practice;def.start=route.geometry.coordinates[0];delete def.via;
@@ -113,7 +122,7 @@ for(const def of defs){
  }
  for(const s of signals){s.profile='standard';}
  if(def.theme==='city'&&signals.length)signals[Math.floor(signals.length/2)].profile='arrow';
- if(def.theme==='mountain'&&signals.length)signals[0].profile='flash';
+ if(!def.world&&def.theme==='mountain'&&signals.length)signals[0].profile='flash';
  // Do not let duplicate nearby signal nodes produce contradictory phases.
  const merged=[];for(const s of signals){if(!merged.some(o=>dist(proj.toLocal([s.lon,s.lat]),proj.toLocal([o.lon,o.lat]))<55))merged.push(s);}
  if(['city','urban'].includes(def.theme)){
@@ -130,7 +139,8 @@ for(const def of defs){
  def.situations={signalCrosswalks:encounters.crossings.filter(c=>c.signal).length,unsignalCrosswalks:encounters.crossings.filter(c=>!c.signal).length,police:encounters.officers.length};
  if(encounters.crossings.length){def.features.push('보행자 횡단');def.assessment.push('횡단보도 보행자에게 양보');}
  if(def.situations.police)def.features.push('경찰관 순찰 구간');
- const bundle={id:def.id,source:'OpenStreetMap contributors; saved route geometry',origin,reference:city?.reference,roads:{elements:roads},scene:{elements:scene},signals:merged,crossings:crossing,rules,route,parking,tolls};
+ def.country??='JP';
+ const bundle={id:def.id,country:def.country,source:'OpenStreetMap contributors; saved route geometry',origin,reference:city?.reference,roads:{elements:roads},scene:{elements:scene},signals:merged,crossings:crossing,rules,route,parking,tolls};
  const minDriving=route.distance/(def.pace/3.6)/60+1.5+merged.filter(s=>isNear(s,28)).length*.15+(tolls.length?1:0);
  if(minDriving>10)throw Error(`${def.id} is too long: ${minDriving.toFixed(1)} min`);
  if(def.practice){const low=Math.max(3,Math.ceil(minDriving));def.minutes=[low,Math.min(10,low+2)];}
@@ -140,4 +150,8 @@ for(const def of defs){
  await writeFile(`data/courses/${def.id}.json`,JSON.stringify(bundle));
  console.log(def.id,def.distance+'m',roads.length+' roads',scene.length+' features',merged.length+' signals','estimate floor '+minDriving.toFixed(1));
 }
-await writeFile('data/driving-courses.json',JSON.stringify({version:1,note:'실제 지도 형태를 바탕으로 구성한 짧은 연습 코스. 교통과 신호 주기, 주차면은 연습용이며 실제 여행 경로가 아닙니다.',courses:defs},null,2));
+// Mix locations in one carousel: overseas courses must not be hidden behind
+// every existing Japan course. Country is a label, never a required step.
+const groups=['JP','AU','NZ'].map(code=>defs.filter(c=>c.country===code));
+const ordered=[];for(let i=0;i<Math.max(...groups.map(g=>g.length));i++)for(const group of groups)if(group[i])ordered.push(group[i]);
+await writeFile('data/driving-courses.json',JSON.stringify({version:2,note:'실제 지도 형태를 바탕으로 구성한 짧은 연습 코스. 교통과 신호 주기, 주차면은 연습용이며 실제 여행 경로가 아닙니다. 호주·뉴질랜드 코스의 표고는 평탄화했으며 외벽·수목은 대표적인 자체 모델입니다.',courses:ordered},null,2));

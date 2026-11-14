@@ -27,7 +27,7 @@ function routeFromEdges(graph,path) {
  return {distance,duration,geometry:{type:'LineString',coordinates},legs:[{distance,duration,steps}],practice:{left,right,longestStraight:Math.round(longestStraight),serviceMetres:Math.round(serviceMetres)}};
 }
 
-export function practiceRoute(ways,end,{seed=1,min=650,max=1300,turns=2,radius=800}={}) {
+export function practiceRoute(ways,end,{seed=1,min=650,max=1300,turns=2,radius=800,straight=180,serviceRatio=.3}={}) {
  const graph=buildGraph(ways),{nodes,edges}=graph,goal=snap(graph,end[1],end[0]);if(goal<0)throw Error('No parking approach');
  const neighbours=nodes.map(()=>new Set());for(const e of edges){neighbours[e.from].add(e.to);neighbours[e.to].add(e.from);}
  const critical=new Set(nodes.flatMap((n,i)=>neighbours[i].size!==2||i===goal?[i]:[])),incoming=new Map();
@@ -49,12 +49,12 @@ export function practiceRoute(ways,end,{seed=1,min=650,max=1300,turns=2,radius=8
    if(length<min)continue;
    const candidate=routeFromEdges(graph,path);if(!candidate)continue;
    const m=candidate.practice;
-   if(m.longestStraight>180||m.left<turns||m.right<turns)continue;
+   if(m.longestStraight>straight||m.left<turns||m.right<turns||m.serviceMetres>=candidate.distance*serviceRatio)continue;
    const cost=m.longestStraight*3+m.serviceMetres*4+Math.abs(length-(min+max)*.5)*.25+Math.max(0,turns-m.left)*900+Math.max(0,turns-m.right)*900+Math.max(0,m.left+m.right-9)*45;
    if(cost<bestCost){bestCost=cost;best=candidate;}
   }
  }
- if(!best||best.practice.left<turns||best.practice.right<turns||best.practice.longestStraight>280)
+ if(!best||best.practice.left<turns||best.practice.right<turns||best.practice.longestStraight>straight)
   throw Error('No varied practice route: '+JSON.stringify(best?.practice));
  return best;
 }

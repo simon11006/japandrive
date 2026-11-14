@@ -21,6 +21,7 @@ import { DriveRenderer } from "./drive-renderer.mjs";
 import { drawNavMap, drawCarMarker } from "./nav-display.mjs";
 import { loadViewSettings, saveViewSettings, viewSettings, VIEW_DEFAULTS } from "./driver-view.mjs";
 import { loadTerrain } from "./terrain.mjs";
+import {courseLocation} from './country-profiles.mjs';
 import {
   mappedSpeedLimit,
   DrivingScore,
@@ -754,11 +755,15 @@ async function loadCourses(){
   courses=catalog.courses;courseTerrain=terrain;
   maxReachedStep=1;
   renderCourses();
-  await chooseCourse(courses[0]);
-  if(selectedCourse.id===courses[0].id&&courseBundle){
+  const linkedCourse=courses.find(c=>c.id===new URLSearchParams(location.search).get('course'));
+  const requested=linkedCourse||courses[0];
+  await chooseCourse(requested);
+  $('#course-total').textContent=`3개국 · ${courses.length}개 코스 · 3–9분`;
+  if(selectedCourse.id===requested.id&&courseBundle){
     active=false;intro=true;speed=0;
     $('#loading').textContent='';
     $('#intro-status').textContent='';
+    if(linkedCourse){openWizard();showWizardStep(1);}
   }
 }
 function visibleCourses(){return courses.filter(c=>courseFilter==='all'||(courseFilter==='city'&&['city','urban'].includes(c.theme))||(courseFilter==='nature'&&['coast','mountain'].includes(c.theme))||(courseFilter==='beginner'&&c.stars===1)||courseFilter===c.theme);}
@@ -766,11 +771,11 @@ function renderCourses(){
   const visible=visibleCourses();
   $('#course-cards').replaceChildren(...visible.map(c=>{
     const button=document.createElement('button');button.className='course-card';button.dataset.course=c.id;
-    button.setAttribute('aria-label',`${c.name} · ${c.region} · ${courseTime(c)} · 난이도 ${c.stars}`);
+    button.setAttribute('aria-label',`${c.name} · ${courseLocation(c)} · ${courseTime(c)} · 난이도 ${c.stars}`);
     const picture=document.createElement('div');picture.className='course-picture';
     const canvas=document.createElement('canvas');canvas.setAttribute('aria-hidden','true');picture.append(canvas);
     const body=document.createElement('div');body.className='course-card-body';
-    const region=document.createElement('small');region.className='course-region';region.textContent=`${String(courses.indexOf(c)+1).padStart(2,'0')} / ${c.region}`;
+    const region=document.createElement('small');region.className='course-region';region.textContent=courseLocation(c);
     const title=document.createElement('h2');title.textContent=c.name.split(' · ')[0];
     const meta=document.createElement('div');meta.className='course-meta';
     const time=document.createElement('span');time.textContent=courseTime(c);
@@ -788,13 +793,14 @@ function updateCourseSelection(){
   }
   const detail=$('#course-detail');detail.replaceChildren();if(!selectedCourse)return;
   const c=selectedCourse,el=(tag,text,cls)=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
-  const kicker=el('small',`${c.region} / ${c.category}`,'feature-kicker'),title=el('h2',c.name),description=el('p',c.subtitle,'feature-subtitle');
+  const kicker=el('small',`${courseLocation(c)} / ${c.category}`,'feature-kicker'),title=el('h2',c.name),description=el('p',c.subtitle,'feature-subtitle');
   const stats=el('div','','feature-stats');
   for(const [label,value]of [['예상 시간',courseTime(c)],['코스 난이도',stars(c)],['주행 거리',distanceText(c.distance)]]){
     const item=el('div');item.append(el('small',label),el('strong',value));stats.append(item);
   }
   const tags=el('div','','feature-tags');for(const feature of c.features)tags.append(el('span',feature));
   detail.append(kicker,title,description,stats,tags);
+  if(c.terrainNote)detail.append(el('small',c.terrainNote,'course-scope'));
   requestAnimationFrame(()=>drawCourseMap($('#course-feature-map'),c,courseBundle,{presentation:true}));
 
 }
@@ -804,7 +810,7 @@ async function chooseCourse(c){
   try{
     const bundle=courseCache.get(c.id)||await json(c.bundle);courseCache.set(c.id,bundle);
     const nextProjection=projection(bundle.origin);
-    const [terrain,boundary]=await Promise.all([loadTerrain(nextProjection),c.region==='오키나와'?json('./data/okinawa-main-island.geojson'):Promise.resolve(null)]);
+    const [terrain,boundary]=await Promise.all([c.country==='JP'?loadTerrain(nextProjection):Promise.resolve(()=>0),c.region==='오키나와'?json('./data/okinawa-main-island.geojson'):Promise.resolve(null)]);
     if(selectedCourse.id!==c.id)return;
     courseWorld={projection:nextProjection,elevation:terrain,coast:boundary?.geometry.coordinates[0].map(nextProjection.toLocal)||null};
     regionReady=true;
@@ -850,7 +856,7 @@ function prepareCourseWorld(){
   tollSession=new TollSession(bundle.tolls.map(g=>({...g,...proj.toLocal(g.geo),mode})),mode);
   const graded=courseElevation(elevation,store.roads,tollSession.gates,parkingGoal);
   driver?.setup({base:pos,roads:store.roads,features,coast,elevation:graded,signals,bays,car,projection:proj,
-    course:{theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
+    course:{country:selectedCourse.country,theme:selectedCourse.theme,style:selectedCourse.style||'okinawa',nodes,route,maneuvers:steps,tolls:tollSession.gates,aerial:courseTerrain.courses[selectedCourse.id]||[]}});
   driver?.setRoadRules(roadRules,store.roads);
   traffic=new TrafficSimulation(store.roads.filter(r=>!r.id.startsWith('practice-')),signals,pos,difficulty.cars);
   traffic.pedestrianStop=(vehicle,path)=>driver?.encounters?.stopDistance(vehicle,path)??Infinity;
@@ -867,7 +873,7 @@ async function startCourse(){
     for(const id of ['#nav','#hud','#hint','#menu'])$(id).hidden=false;
     for(const id of ['#select','#result','#splash'])$(id).hidden=true;
     setTitle(false);document.body.classList.remove('in-menu');document.body.classList.add('driving');window.scrollTo(0,0);
-    $('#course-drive-name').textContent=selectedCourse.name;
+    $('#course-drive-name').textContent=`${courseLocation(selectedCourse)} / ${selectedCourse.name.split(' · ').at(-1)}`;
   }catch(error){$('#trip-status').textContent='코스를 준비하지 못했습니다. '+error.message;$('#trip-status').className='muted error';}
   finally{busy=false;$('#start').textContent='운전 시작';updateStart();}
 }
@@ -933,6 +939,7 @@ function showWizardStep(step, focus = true) {
   document.body.dataset.garageView=garageView;
   updateWizard();
   drawOverview();
+  if(wizardStep===1)requestAnimationFrame(()=>document.querySelector(`[data-course="${selectedCourse?.id}"]`)?.scrollIntoView({behavior:'instant',block:'nearest',inline:'nearest'}));
   if (focus) {
     $("#step-title").focus({ preventScroll: true });
     $("#select").scrollTo({ top: 0, behavior: "instant" });
@@ -959,7 +966,7 @@ function updateWizard() {
   $("#departure-name").textContent = departure?.name || "출발지를 선택하세요";
   $("#drive-summary").textContent = `${car.name} · ${difficulty.name} · ${difficulty.description}`;
   $("#review-course-title").textContent=selectedCourse?.name||'';
-  $("#review-course-meta").textContent=selectedCourse?`${selectedCourse.region} · ${stars(selectedCourse)} · 예상 ${courseTime(selectedCourse)} · 주차 포함`:'';
+  $("#review-course-meta").textContent=selectedCourse?`${courseLocation(selectedCourse)} · ${stars(selectedCourse)} · 예상 ${courseTime(selectedCourse)} · 주차 포함`:'';
 }
 $("#step-back").onclick = () => (wizardStep === 1 ? returnToTitle() : showWizardStep(wizardStep - 1));
 $("#step-next").onclick = () => {
@@ -1797,7 +1804,7 @@ function monitorRules(dt) {
   if (!lane) return;
   currentLimit =
     lane.distance < roadWidth(lane.road.tags) / 2 + 2
-      ? mappedSpeedLimit(lane.road.tags, heading, lane.heading)
+      ? mappedSpeedLimit(lane.road.tags, heading, lane.heading, selectedCourse?.country)
       : { value: null };
   const inLot = visibleFeatures.some((f) => f.tags.amenity === "parking" && insidePolygon(pos, f.points));
   if (inLot) currentLimit = { value: null };

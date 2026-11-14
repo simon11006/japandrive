@@ -8,7 +8,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="manifest.json" />
-    <title>KEEP LEFT: Japan Drive · 일본 첫 운전 연습</title>
+    <title>KEEP LEFT · 좌측통행 운전 게임</title>
+    <meta name="description" content="일본·호주·뉴질랜드의 짧은 코스로 좌측통행을 경험하는 브라우저 운전 게임. 내비게이션을 따라 교차로와 보행자를 지나 목적지에 주차하세요. 한국어·영어 지원." />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="responsive-drive.css" />
     <link rel="stylesheet" href="score-ui.css" />
@@ -17,14 +18,14 @@
     <link rel="stylesheet" href="result-compact.css" />
   </head>
   <body>
-    <canvas id="scene" aria-label="일본 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
+    <canvas id="scene" aria-label="좌측통행 3D 운전 화면"></canvas><canvas id="world" hidden></canvas>
     <button id="mobile-fullscreen" data-fullscreen aria-label="전체화면으로 전환">⛶ 전체화면</button>
     <dialog id="fullscreen-help"><h2>더 넓은 화면에서 운전하기</h2><p>이 브라우저에서는 전체화면 전환을 지원하지 않습니다.</p><p>iPhone·iPad에서는 Safari의 공유 메뉴에서 <b>홈 화면에 추가</b>한 뒤 아이콘으로 실행하세요. 가로로 돌리면 앞 도로와 조작 버튼을 더 넓게 볼 수 있습니다.</p><form method="dialog"><button class="primary">확인</button></form></dialog>
     <div id="engine-error" role="alert"></div>
     <header>
       <a class="brand" href="./">KL <span>KEEP LEFT</span></a>
       <div class="header-right">
-        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.13</span><button id="fullscreen" data-fullscreen>전체 화면</button
+        <span class="lang-switch" role="group" aria-label="Language"><button data-set-lang="ko">한국어</button><button data-set-lang="en">EN</button></span><span class="badge">테스트 0.14</span><button id="fullscreen" data-fullscreen>전체 화면</button
         ><button id="view-open">시야 설정</button><button id="help-open">설명서 <kbd>H</kbd></button><button id="menu" hidden>코스 변경</button>
       </div>
     </header>
@@ -34,7 +35,7 @@
       <div class="title-letterbox top" aria-hidden="true"></div>
       <div class="title-letterbox bottom" aria-hidden="true"></div>
       <div class="title-logo">
-        <small class="title-eyebrow"><i></i> JAPAN DRIVING EXPERIENCE</small>
+        <small class="title-eyebrow"><i></i> LEFT-SIDE DRIVING EXPERIENCE</small>
         <h1>KEEP<span>LEFT<span class="title-arrow" aria-hidden="true">↖</span></span></h1>
         <p class="title-tagline">왼쪽으로, 새로운 드라이브.</p>
       </div>
@@ -47,18 +48,18 @@
         <button id="title-sources" class="menu-item secondary" data-hint="지도·차량 자료와 재현 범위"><span>크레딧</span></button>
         <p id="menu-hint" class="menu-hint" aria-live="polite"></p>
       </nav>
-      <aside class="stage-card"><small>EXPLORE JAPAN</small><strong>도시의 골목에서<br>섬의 해안까지.</strong><span>6개 지역 <b>·</b> 11개 코스 <b>·</b> 3–9분</span><canvas id="intro-map" hidden aria-label="선택한 드라이브 코스 지도"></canvas></aside>
+      <aside class="stage-card"><small>ONE SIDE. MANY ROADS.</small><strong>도시의 골목에서<br>새로운 나라의 길까지.</strong><span id="course-total">3개국 · 19개 코스 · 3–9분</span><a id="game-about" href="./ko/">게임 소개 ↗</a><canvas id="intro-map" hidden aria-label="선택한 드라이브 코스 지도"></canvas></aside>
       <footer class="title-footer">
         <div class="title-loading">
           <p id="intro-status" role="status">드라이브 코스를 불러오는 중…</p>
           <div class="load-bar" aria-hidden="true"><i></i></div>
         </div>
         <span class="title-keys"><kbd>↑</kbd><kbd>↓</kbd> 선택 <kbd>Enter</kbd> 결정 <kbd>Esc</kbd> 뒤로</span>
-        <span class="title-version">TEST 0.13</span>
+        <span class="title-version">TEST 0.14</span>
       </footer>
     </section>
     <main id="select" class="game-ui" hidden>
-      <div class="menu-top"><span class="menu-wordmark">KEEP LEFT<span>JAPAN DRIVE</span></span><button id="setup-help">플레이 가이드 <kbd>H</kbd></button></div>
+      <div class="menu-top"><span class="menu-wordmark">KEEP LEFT<span>DRIVING EXPERIENCE</span></span><button id="setup-help">플레이 가이드 <kbd>H</kbd></button></div>
       <div class="intro">
         <small id="step-caption">STEP 1 / 6</small>
         <h1 id="step-title" tabindex="-1">어디로 떠날까요?</h1>
@@ -259,7 +260,7 @@
         <h2>KEEP LEFT 설명서</h2>
         <nav class="manual-tabs">
           <button data-tab="keys" class="active">조작키</button><button data-tab="start">출발과 주차</button
-          ><button data-tab="rules">일본 도로 규칙</button><button data-tab="score">운전 점수</button
+          ><button data-tab="rules">도로 규칙</button><button data-tab="score">운전 점수</button
           ><button data-tab="trouble">문제 해결</button>
         </nav>
         <section data-tab="keys">
@@ -294,14 +295,16 @@
           </ol>
         </section>
         <section data-tab="rules" hidden>
+          <p><b>국가별 표시:</b> 일본은 가로형 신호등과 역삼각형 止まれ 표지, 호주·뉴질랜드 코스는 세로형 신호등과 팔각형 STOP 표지를 사용합니다. 모두 km/h 단위입니다. 호주 코스는 뉴사우스웨일스 지역입니다.</p>
+          <p>국가별 차이가 있으므로 실제 운전 전에는 현지 도로 규칙을 확인하세요. 이 게임의 신호 주기·교통·주차면은 연습용입니다.</p>
           <ul class="manual-list">
             <li><b>좌측통행:</b> 도로 왼쪽 차선으로 달립니다. 운전석은 오른쪽입니다.</li>
-            <li><b>止まれ(일시정지):</b> 빨간 역삼각형 표지 앞에서는 차가 없어도 반드시 완전히 멈춥니다.</li>
+            <li><b>일본의 止まれ 표지:</b> 빨간 역삼각형 표지 앞에서는 차가 없어도 반드시 완전히 멈춥니다.</li>
             <li><b>신호:</b> 빨간불에는 정지합니다. 노란불에는 안전하게 정지할 수 있는 경우 정지선 앞에 멈춥니다. 녹색 화살표가 켜지면 그 방향으로 진행할 수 있습니다.</li>
-            <li><b>점멸 신호:</b> 빨간 점멸은 일시정지 후 안전 확인, 노란 점멸은 주변 교통에 주의하며 진행합니다.</li>
+            <li><b>일본의 점멸 신호:</b> 빨간 점멸은 일시정지 후 안전 확인, 노란 점멸은 주변 교통에 주의하며 진행합니다.</li>
             <li><b>보행자:</b> 보행자 신호는 빨간색 서 있는 사람과 초록색 걷는 사람으로 표시됩니다. 사람은 자기 신호를 따르고, 운전자는 회전 중에도 횡단보도를 확인합니다. 신호 없는 횡단보도에서 건너려는 사람이 있으면 앞에서 멈추세요. 회전할 때에도 횡단 중인 보행자가 모두 지나간 뒤 출발합니다. 경찰관은 보도에서 순찰하는 인물이며 별도 수신호를 지시하지 않습니다. <a href="https://www.npa.go.jp/bureau/traffic/oudanhodou/info.html" target="_blank" rel="noopener">일본 경찰청 보행자 우선 안내</a></li>
             <li><b>제한속도:</b> 도로의 속도 표지를 확인하세요. 지도에 등록된 값은 화면에 표시하며, 미확인 구간은 '표지 확인'으로 나옵니다.</li>
-            <li><b>방향지시등:</b> 회전 30m 전, 차선 변경 3초 전에 켭니다.</li>
+            <li><b>방향지시등(일본 기준):</b> 회전 30m 전, 차선 변경 3초 전에 켭니다.</li>
             <li><b>미러:</b> 왼쪽 미러는 오른쪽 운전석에서 멀리 있습니다. 좌회전·주차 전에는 <kbd>Q</kbd>로 꼭 확인하세요.</li>
           </ul>
         </section>

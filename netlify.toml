@@ -1,0 +1,18 @@
+[build]
+  command = "node scripts/build-site.mjs"
+  publish = "_site"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Set SITE_URL after choosing the official address. It may include a subpath.
+# GOOGLE_SITE_VERIFICATION is optional; it is a public ownership token.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/data/courses/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

@@ -2,3 +2,4 @@ data/.test-map-*
 *.log
 _jd.tgz
 node_modules/
+_site/

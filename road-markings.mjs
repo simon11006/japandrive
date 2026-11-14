@@ -5,13 +5,15 @@ export function stripPolygon(a,b,width) {
   const x=(b.y-a.y)/length*width/2,y=-(b.x-a.x)/length*width/2;
   return [{x:a.x-x,y:a.y-y},{x:a.x+x,y:a.y+y},{x:b.x+x,y:b.y+y},{x:b.x-x,y:b.y-y}];
 }
-export function approachMarkings(approach) {
+export function approachMarkings(approach, crossingStyle='zebra') {
   const f=forward(approach.heading),r={x:Math.cos(approach.heading),y:Math.sin(approach.heading)};
   const point=(side,ahead)=>({x:approach.stop.x+r.x*side+f.x*ahead,y:approach.stop.y+r.y*side+f.y*ahead});
   const left=-approach.width/2+.2,right=approach.oneway?approach.width/2-.2:-.12;
   const stop=stripPolygon(point(left,0),point(right,0),.6),backing=stripPolygon(point(left,0),point(right,0),.86);
   const crossing=[];
-  for(let x=-approach.width/2+.4;x<approach.width/2-.35;x+=.95)
+  if(crossingStyle==='parallel'){
+    for(const ahead of [1.6,4.5])crossing.push(stripPolygon(point(-approach.width/2+.2,ahead),point(approach.width/2-.2,ahead),.18));
+  }else for(let x=-approach.width/2+.4;x<approach.width/2-.35;x+=.95)
     crossing.push([point(x,1.6),point(Math.min(x+.5,approach.width/2-.2),1.6),point(Math.min(x+.5,approach.width/2-.2),4.5),point(x,4.5)]);
   return {stop,backing,crossing};
 }

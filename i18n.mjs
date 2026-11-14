@@ -3,22 +3,26 @@
 // numbers or names. Any text that appears on screen is translated as it is
 // inserted (MutationObserver), and canvas drawings call t() directly.
 
+import {WORLD_EN} from './world-copy.mjs';
+const requestedLanguage=new URLSearchParams(globalThis.location?.search||'').get('lang');
 const saved = (() => {
+  if(!globalThis.window)return null;
   try {
     return localStorage.getItem("keep-left-lang");
   } catch {
     return null;
   }
 })();
-export const LANG = saved || (/^ko\b/i.test(globalThis.navigator?.language || "ko") ? "ko" : "en");
+export const LANG = ['ko','en'].includes(requestedLanguage)?requestedLanguage:['ko','en'].includes(saved)?saved:(/^ko\b/i.test(globalThis.navigator?.language || "ko") ? "ko" : "en");
 export function setLanguage(lang) {
   try {
     localStorage.setItem("keep-left-lang", lang);
   } catch {}
-  location.reload();
+  const url=new URL(location.href);url.searchParams.set('lang',lang);location.assign(url.href);
 }
 
 const EN = {
+  ...WORLD_EN,
   "제동을 누른 채 ‘파킹’ 버튼을 눌러 출발하세요.": "Hold the brake and tap Park to release it.",
   "현재 선택": "Your selection",
   "다음 단계": "Next step",
@@ -625,6 +629,13 @@ const EN = {
 
 // Sentences with numbers or names: [pattern, (match, t) => English].
 const PATTERNS = [
+  [/^(\d+)–(\d+)분$/, m=>`${m[1]}–${m[2]} min`],
+  [/^테스트 ([\d.]+)$/, m=>`Test ${m[1]}`],
+  [/^(\d+:\d+) \/ 예상 (.+)분$/, m=>`${m[1]} / est. ${m[2]} min`],
+  [/^(좌회전|우회전) (\d+)회$/, m=>`${m[2]} ${m[1]==='좌회전'?'left':'right'} turns`],
+  [/^(\d+)개국 · (\d+)개 코스 · (.+)분$/, m=>`${m[1]} countries · ${m[2]} courses · ${m[3]} min`],
+  [/^(.+) 목표 주차장$/, (m,t)=>`${t(m[1])} target car park`],
+  [/^(.+) 출발점$/, (m,t)=>`${t(m[1])} starting point`],
   [/^획득 \+(\d+)(?:점)?$/,m=>`Earned +${m[1]} pts`],
   [/^감점 −(\d+)(?:점)?$/,m=>`Deductions −${m[1]} pts`],
   [/^\+(\d+)점 · (.+)$/, (m,t)=>`+${m[1]} pts · ${t(m[2])}`],
@@ -682,8 +693,8 @@ const PATTERNS = [
   }],
 ];
 
-export function t(text) {
-  if (LANG !== "en" || text == null) return text;
+export function t(text, language=LANG) {
+  if (language !== "en" || text == null) return text;
   const s = String(text);
   const key = s.trim().replace(/\s+/g, " ");
   if (!key || !/[\uac00-\ud7a3]/.test(key)) return s;
@@ -692,7 +703,7 @@ export function t(text) {
   for (const [re, fn] of PATTERNS) {
     const m = key.match(re);
     if (m) {
-      const out = fn(m, t);
+      const out = fn(m, part=>t(part,language));
       if (out != null) return wrap(out);
     }
   }
@@ -730,6 +741,7 @@ function translateNode(node) {
 
 export function startTranslation() {
   document.documentElement.lang = LANG;
+  const about=document.querySelector('#game-about');if(about)about.href=`./${LANG}/`;
   if (LANG !== "en") return;
   document.title = t(document.title);
   translateNode(document.body);

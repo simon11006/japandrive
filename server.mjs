@@ -297,7 +297,7 @@ export const createRequestHandler =
       }
       const path = resolve(
         root,
-        "." + decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname),
+        "." + decodeURIComponent(url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname),
       );
       const file = path.startsWith(root.endsWith(sep) ? root : root + sep) ? await staticFile(path) : null;
       if (!file) {

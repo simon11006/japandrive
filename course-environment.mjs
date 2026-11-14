@@ -63,7 +63,7 @@ export function buildCourseBuildings(renderer,features,theme,roads,nodes=[],styl
    const a=pts[i-1],b=pts[i],len=distance(a,b);if(len>2)details.add('box','#c7c4b9',{x:(a.x+b.x)/2,y:(a.y+b.y)/2,h:top-renderer.elevation({x:(a.x+b.x)/2,y:(a.y+b.y)/2})+.3},[.16,.6,len],-headingBetween(a,b));
   }
   if(seed%3===0){if(style==='okinawa')details.add('pole','#ced5d0',{...f.center,h:top-renderer.elevation(f.center)+.8},[1.35,1.5,1.35]);details.add('box','#a9b3b1',{x:f.center.x+2,y:f.center.y,h:top-renderer.elevation({x:f.center.x+2,y:f.center.y})+.4},[1.2,.8,.8]);}
-  if(style==='kyoto'&&h<13&&pts.length===5){
+  if((style==='kyoto'||profile.pitched)&&h<13&&pts.length===5){
     const a=pts[0],b=pts[1],c=pts[2],d=pts[3],u={x:(a.x+d.x)/2,y:(a.y+d.y)/2},v={x:(b.x+c.x)/2,y:(b.y+c.y)/2};
     const roofVertices=[];for(const tri of [[a,b,v],[a,v,u],[d,u,v],[d,v,c]])for(const p of tri)roofVertices.push(p.x-base.x,top+(p===u||p===v?1.4:.15),p.y-base.y);
     pitchedRoof.push(...roofVertices);
@@ -140,7 +140,7 @@ export function buildCourseEnvironment(renderer,{theme,style='okinawa',roads,fea
      renderer.roadsideProps.push({kind:'lamp',...at});
      details.add('pole','#6b7779',{...at,h:4.1},[.15,8.2,.15]);details.add('box','#737e80',{x:at.x-r.x*.6,y:at.y-r.y*.6,h:8.1},[1.4,.09,.12],-h);details.add('box','#e3e7d6',{x:at.x-r.x*1.15,y:at.y-r.y*1.15,h:8},[.7,.12,.26],-h);
     }
-    if(!highway&&(urban||theme==='village')){
+    if(!highway&&!profile.undergroundPower&&(urban||theme==='village')){
      const pole={x:at.x+r.x*.6,y:at.y+r.y*.6};if(!clear(pole)){previousPole=null;continue;}renderer.roadsideProps.push({kind:'utility',...pole});details.add('pole','#a1a69f',{...pole,h:4.9},[.26,9.8,.26]);details.add('box','#525c59',{...pole,h:8.8},[1.7,.13,.18],-h);
      if(previousPole)for(const off of [-.55,.55]){const av=local({x:previousPole.x+r.x*off,y:previousPole.y+r.y*off},8.8),bv=local({x:pole.x+r.x*off,y:pole.y+r.y*off},8.8);cables.push(...av.toArray(),(av.x+bv.x)/2,(av.y+bv.y)/2-.55,(av.z+bv.z)/2,(av.x+bv.x)/2,(av.y+bv.y)/2-.55,(av.z+bv.z)/2,...bv.toArray());}previousPole=pole;
     }

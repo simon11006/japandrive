@@ -1,4 +1,5 @@
 import { t } from "./i18n.mjs";
+import {countryProfile,signalLensPositions} from './country-profiles.mjs';
 import {prepareSignalLayouts,roadsideSpace,roadJunctions,pedestrianSignalMounts} from "./junctions.mjs";
 import {stripPolygon,approachMarkings,maneuverGuides} from './road-markings.mjs';
 import { pointInRing } from './map-data.mjs';
@@ -850,6 +851,8 @@ export class DriveRenderer {
     prepareSignalLayouts(signals, roads);
     const metal=mat("#747e7f",.4,{metalness:.5});
     const clear=roadsideSpace(roads);
+    const country=this.course?.country||'JP',profile=countryProfile(country),vertical=profile.signalLayout==='vertical';
+    const lensPositions=signalLensPositions(country);
     const pedestrianIcons=[false,true].map(walking=>canvasTexture(96,112,c=>{
       c.fillStyle='#060d12';c.fillRect(0,0,96,112);
       c.fillStyle='#fff';c.beginPath();c.arc(walking?51:48,19,8,0,Math.PI*2);c.fill();
@@ -865,24 +868,25 @@ export class DriveRenderer {
         const head=new THREE.Group();
         head.position.copy(this.local(approach.head,5.2));
         head.rotation.y=-approach.heading;
-        box(head,[1.35,.48,.30],[0,0,0],mat("#29383d"));
+        box(head,vertical?[.48,1.35,.30]:[1.35,.48,.30],[0,0,0],mat("#29383d"));
         const bulbs=[];
         for(const [i,color]of ["#32965b","#b59432","#933c39"].entries()){
           const bulb=new THREE.Mesh(new THREE.CircleGeometry(.16,24),new THREE.MeshBasicMaterial({color}));
-          bulb.position.set(-.43+i*.43,0,.16);head.add(bulb);bulbs.push(bulb);
+          const [x,y]=lensPositions[i];bulb.position.set(x,y,.16);head.add(bulb);bulbs.push(bulb);
           // Sun visors leave the lenses visible to an approaching driver.
-          box(head,[.35,.035,.20],[-.43+i*.43,.20,.22],metal);
+          box(head,[.35,.035,.20],[x,y+.20,.22],metal);
         }
         let arrow;
         if(s.profile==='arrow'){
-          box(head,[.47,.47,.30],[.43,-.49,0],mat('#29383d'));
+          const ax=vertical?.5:.43,ay=vertical?-.43:-.49;
+          box(head,[.47,.47,.30],[ax,ay,0],mat('#29383d'));
           const texture=canvasTexture(128,128,c=>{
             c.fillStyle='#080f12';c.fillRect(0,0,128,128);c.strokeStyle='#fff';c.lineWidth=13;c.lineCap='square';c.lineJoin='miter';
             c.beginPath();c.moveTo(25,64);c.lineTo(98,64);c.moveTo(69,35);c.lineTo(98,64);c.lineTo(69,93);c.stroke();
           }).texture;
           arrow=new THREE.Mesh(new THREE.CircleGeometry(.185,32),new THREE.MeshBasicMaterial({map:texture,color:'#55ffc2',toneMapped:false}));
-          arrow.position.set(.43,-.49,.16);head.add(arrow);
-          box(head,[.4,.03,.2],[.43,-.25,.22],metal);
+          arrow.position.set(ax,ay,.16);head.add(arrow);
+          box(head,[.4,.03,.2],[ax,ay+.24,.22],metal);
         }
         const pedestrians=[];
         if(s.profile!=='flash')for(const mount of pedestrianSignalMounts(approach,clear)){
@@ -905,7 +909,7 @@ export class DriveRenderer {
         }
         this.signalGroup.add(head);
         heads.push({bulbs,arrow,pedestrians,heading:approach.heading});
-        const markings=approachMarkings(approach);stops.push(markings.stop);backings.push(markings.backing);crossings.push(...markings.crossing);
+        const markings=approachMarkings(approach,profile.crossing);stops.push(markings.stop);backings.push(markings.backing);crossings.push(...markings.crossing);
       }
       this.signalHeads.push({signal:s,heads});
     }
@@ -994,11 +998,14 @@ export class DriveRenderer {
       } else {
         cylinderBetween(group, [-3.7, 0, 0], [-3.7, 2.5, 0], 0.035, pole);
         const tex = canvasTexture(256, 256, (c, w, h) => {
+          const profile=countryProfile(this.course?.country);
           c.fillStyle = "#ba3838";
           c.beginPath();
-          c.moveTo(w * 0.5, h * 0.91);
-          c.lineTo(w * 0.05, h * 0.1);
-          c.lineTo(w * 0.95, h * 0.1);
+          if(profile.stopShape==='octagon'){
+            for(let i=0;i<8;i++){const a=(i+.5)*Math.PI/4,x=w/2+Math.cos(a)*w*.45,y=h/2+Math.sin(a)*h*.45;i?c.lineTo(x,y):c.moveTo(x,y);}
+          }else{
+            c.moveTo(w * 0.5, h * 0.91);c.lineTo(w * 0.05, h * 0.1);c.lineTo(w * 0.95, h * 0.1);
+          }
           c.closePath();
           c.fill();
           c.strokeStyle = "#fff";
@@ -1007,7 +1014,7 @@ export class DriveRenderer {
           c.fillStyle = "#fff";
           c.font = "bold 38px sans-serif";
           c.textAlign = "center";
-          c.fillText("止まれ", w / 2, h * 0.43);
+          c.fillText(profile.stopText, w / 2, h * (profile.stopShape==='octagon'?.56:.43));
         });
         const sign = new THREE.Mesh(
           new THREE.PlaneGeometry(0.65, 0.65),
