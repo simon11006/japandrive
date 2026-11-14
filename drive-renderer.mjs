@@ -15,7 +15,7 @@ import {
 } from "./simulation.mjs";
 import { groundSurface, ribbonSections, surfacePose } from "./road-surface.mjs";
 import { buildCockpit } from "./cockpit.mjs";
-import { makeCarModel } from "./car-model.mjs";
+import { makeCarModel, disposeCarModel } from "./car-model.mjs";
 import { drawNavOverlay } from "./nav-display.mjs";
 import { navigationScale } from './navigation.mjs';
 import {StreetEncounters,pedestrianGreen} from './street-encounters.mjs';
@@ -945,6 +945,7 @@ export class DriveRenderer {
       this.mirrors.push({ ...mount, target, camera });
     }
     this.scene.remove(this.externalCar);
+    disposeCarModel(this.externalCar);
     // Your own car, seen on the title screen and in the door mirrors.
     this.externalCar = makeCarModel(car.id);
     this.scene.add(this.externalCar);

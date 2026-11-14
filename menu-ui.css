@@ -2,7 +2,7 @@
 :root {--menu-lime:#d8f580;--menu-white:#f3f4ed;--menu-muted:#aab6c4;--menu-edge:clamp(20px,4vw,72px);}
 #splash[hidden],#select[hidden] {display:none!important;}
 body.on-title #splash.title-screen {position:fixed;inset:0;display:block;padding:0;background:transparent;overflow:hidden;color:var(--menu-white);}
-body.on-title .title-shade {background:linear-gradient(90deg,#080e19ef 0%,#08101bc9 30%,#080e1930 69%,#080e1910),linear-gradient(0deg,#080e19f2,transparent 60%);}
+body.on-title .title-shade {background:linear-gradient(90deg,#080e19ef 0%,#08101bc9 30%,#080e1910 58%,transparent),linear-gradient(0deg,#080e19e8,#080e1918 26%,transparent 48%);}
 body.on-title .title-letterbox {display:none;}
 body.on-title .title-lang {top:24px;right:var(--menu-edge);left:auto;gap:2px;padding:3px;border:1px solid #d3e1f024;border-radius:30px;background:#0a132580;}
 body.on-title .title-lang button {border:0;background:none;font-size:11px;padding:8px 14px;border-radius:20px;}
@@ -34,9 +34,9 @@ body.on-title .title-menu .menu-item:is(:hover,.active,:focus-visible) i {color:
 body.on-title .title-menu .secondary {grid-column:auto;justify-content:center;min-height:40px;font-size:11px;margin-top:8px;padding:8px 2px;border-color:#c9d8e221;background:#0b14277a;border-radius:4px;}
 body.on-title .title-menu .secondary:is(:hover,.active,:focus-visible) {padding-left:2px;}
 body.on-title .menu-hint {grid-column:1/-1;min-height:16px;font-size:10px;color:#98a7b5;margin:12px 0 0;line-height:1.5;text-shadow:none;}
-body.on-title .stage-card {position:absolute;top:auto;bottom:13vh;right:var(--menu-edge);width:240px;padding:0;border:0;border-left:1px solid #d8f58075;padding-left:24px;background:none;backdrop-filter:none;box-shadow:none;animation:menu-reveal .8s both;}
+body.on-title .stage-card {position:absolute;top:auto;bottom:9vh;right:var(--menu-edge);width:240px;padding:0;border:0;border-left:1px solid #d8f58075;padding-left:24px;background:none;backdrop-filter:none;box-shadow:none;animation:menu-reveal .8s both;}
 body.on-title .stage-card>small {font:600 9px/1.5 Arial,sans-serif;letter-spacing:2px;color:var(--menu-lime);}
-body.on-title .stage-card>strong {display:block;font-size:24px;line-height:1.5;margin:15px 0;letter-spacing:-.04em;color:#e7efed;}
+body.on-title .stage-card>strong {display:block;font-size:18px;line-height:1.3;margin:8px 0;letter-spacing:-.04em;color:#e7efed;}
 body.on-title .stage-card>span {font-size:11px;letter-spacing:0;color:#c7d0ce;}.stage-card b {padding:0 5px;font-weight:400;color:#6a7e82;}
 body.on-title .title-footer {height:7vh;min-height:42px;left:var(--menu-edge);right:var(--menu-edge);padding:0;border-top:1px solid #d9e6ed20;color:#90a1af;font-size:10px;}
 body.on-title .title-version {font:500 9px/1 Arial,sans-serif;letter-spacing:2px;}
@@ -243,15 +243,15 @@ body[data-garage-view="interior"] .garage-info {display:none;}
 }
 @media(max-height:500px) and (orientation:landscape){
  :root {--menu-edge:22px;}
- body.on-title .title-logo {top:18%;left:5vw;width:40vw;max-width:none;}
- body.on-title .title-logo h1 {font-size:clamp(55px,11vw,90px);margin:18px 0;}
+ body.on-title .title-logo {top:12%;left:5vw;width:40vw;max-width:none;}
+ body.on-title .title-logo h1 {font-size:clamp(55px,9.3vw,76px);margin:18px 0;}
  body.on-title .title-eyebrow {font-size:7px;letter-spacing:1.5px;}
  body.on-title .title-tagline {font-size:11px;}
- body.on-title .title-menu {left:auto;right:5vw;top:auto;bottom:19%;width:42vw;max-height:65vh;overflow-y:auto;}
- body.on-title .title-menu .menu-item {font-size:15px;min-height:40px;padding:8px 12px;}
- body.on-title .title-menu .secondary {font-size:9px;min-height:32px;padding:5px 0;}
+ body.on-title .title-menu {left:5vw;right:5vw;top:auto;bottom:11%;width:auto;max-height:none;overflow:visible;grid-template-columns:repeat(6,1fr);gap:5px 8px;}
+ body.on-title .title-menu .menu-item {grid-column:span 3;font-size:15px;min-height:38px;padding:7px 12px;}
+ body.on-title .title-menu .secondary {grid-column:span 2;font-size:9px;min-height:28px;margin-top:0;padding:4px 0;}
  body.on-title .menu-hint {display:none;}
- body.on-title .press-start {left:auto;right:5vw;width:40vw;bottom:32%;top:auto;}
+ body.on-title .press-start {left:auto;right:5vw;width:40vw;bottom:11%;top:auto;}
  body.on-title .press-start>span {font-size:16px;}.press-start small {font-size:9px;}
  body.on-title .stage-card,body.on-title .title-keys {display:none;}
  body.on-title .title-lang {top:10px;right:22px;}.title-footer {height:32px;}

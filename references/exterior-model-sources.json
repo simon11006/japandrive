@@ -1,0 +1,30 @@
+{
+  "reviewed": "2026-11-14",
+  "method": "Toyota official front/rear photographs were visually compared with original native Three.js geometry. No third-party photograph is redistributed or used as a vehicle skin. Dimensions and wheel sizes match vehicles.mjs; surface curves, trim placement, paint colours and the simplified interior visible through the windscreen are estimates, not OEM CAD.",
+  "vehicles": [
+    {
+      "id": "prius",
+      "generation": "XW50, fourth generation, Japanese right-hand-drive",
+      "features": ["low wedge bonnet and fastback roof", "angular headlamp housings and LED edges", "split rear hatch glass and vertical tail lamps", "separate door windows, pillars, mirrors and panel gaps", "15-inch wheel diameter and 195/65R15 tyre profile"],
+      "sources": [
+        "https://global.toyota/en/album/images/22668368/",
+        "https://global.toyota/pages/news/images/2015/12/09/1300/pri1512_01_s.jpg",
+        "https://global.toyota/pages/news/images/2015/12/09/1300/pri1512_02_s.jpg",
+        "https://toyota.jp/ucar/catalog/brand-TOYOTA/car-PRIUS/201512/10101053/",
+        "https://toyota.jp/pages/contents/prius/004_p_001/pdf/spec/prius_equipment_list_201612.pdf"
+      ]
+    },
+    {
+      "id": "alphard",
+      "generation": "40 series, fourth generation, Japanese right-hand-drive",
+      "features": ["tall cabin and short bonnet", "chrome-block grille, three projector lamps and corner fog recesses", "sliding door tracks, chrome window belt and privacy glass", "layered horizontal rear lamps, spoiler and rear wiper", "18-inch multi-spoke wheels and 225/60R18 tyre profile"],
+      "sources": [
+        "https://global.toyota/en/album/images/39287317/",
+        "https://global.toyota/pages/news/images/2023/06/21/1330/20230621_01_01_s.jpg",
+        "https://global.toyota/pages/news/images/2023/06/21/1330/20230621_01_02_s.jpg",
+        "https://toyota.jp/ucar/catalog/brand-TOYOTA/car-ALPHARD/202306/10149467/",
+        "https://toyota.jp/pages/contents/carlineup/archive/alphard/2023-06/pdf/alphard_main_s_202306_202411.pdf"
+      ]
+    }
+  ]
+}

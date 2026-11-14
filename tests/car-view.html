@@ -1,17 +1,84 @@
-<!doctype html><meta charset="utf-8"><title>차량 외관 확인</title><style>body{margin:0;background:#9fb7bd}</style>
-<script type="module">
-import * as THREE from "../vendor/three.module.js";
-import { makeCarModel } from "../car-model.mjs";
-import { makeSky, SUN_DIRECTION } from "../graphics.mjs";
-const q = new URLSearchParams(location.search), id = q.get("car") || "prius", angle = Number(q.get("a") || 0.7);
-const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true; document.body.append(r.domElement);
-const scene = new THREE.Scene(); scene.add(makeSky());
-const pm = new THREE.PMREMGenerator(r); scene.environment = pm.fromScene(new THREE.Scene().add(makeSky()) && (()=>{const s=new THREE.Scene();s.add(makeSky());return s;})()).texture;
-scene.add(new THREE.HemisphereLight("#d6ecff", "#6f7a5c", 1.2));
-const sun = new THREE.DirectionalLight("#fff1d6", 3); sun.position.copy(SUN_DIRECTION).multiplyScalar(20); sun.castShadow = true; scene.add(sun);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: "#6b6f70" })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-const car = makeCarModel(id); scene.add(car);
-const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 5000);
-cam.position.set(Math.cos(angle) * 9, Number(q.get("h") || 1.6), Math.sin(angle) * 9); cam.lookAt(0, 0.7, 0);
-r.render(scene, cam); document.title = "ready";
-</script>
+<!doctype html>
+<html lang="ko">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>차량 외관 확인</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0a101b;
+      color: #eef4ff;
+      font: 14px system-ui;
+    }
+    nav {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button,
+    select {
+      font: inherit;
+      border: 1px solid #657486;
+      background: #142133;
+      color: inherit;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    output {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      color: #adbbc9;
+    }
+  </style>
+  <nav>
+    <select aria-label="차량">
+      <option value="prius">프리우스</option>
+      <option value="alphard">알파드</option></select
+    ><button data-angle="-.12">앞 3/4</button
+    ><button data-angle="-.72">정면</button
+    ><button data-angle=".85">측면</button
+    ><button data-angle="2.0">뒤 3/4</button
+    ><button data-angle="2.42">후면</button>
+  </nav>
+  <output>차량을 준비하고 있습니다.</output>
+  <script type="module">
+    import * as THREE from "../vendor/three.module.js";
+    import { MenuStage } from "../menu-stage.mjs";
+    const q = new URLSearchParams(location.search),
+      select = document.querySelector("select"),
+      stage = new MenuStage();
+    select.value = q.get("car") === "alphard" ? "alphard" : "prius";
+    let yaw = -0.12;
+    const r = new THREE.WebGLRenderer({ antialias: true });
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.append(r.domElement);
+    function render() {
+      r.setSize(innerWidth, innerHeight);
+      stage.render(r, { id: select.value }, 0, innerWidth, innerHeight, {
+        centered: true,
+        yaw,
+      });
+      document.querySelector("output").textContent =
+        `${select.selectedOptions[0].textContent} · ${r.info.render.calls} draw calls · ${r.info.render.triangles.toLocaleString()} triangles`;
+      document.title = "차량 외관 확인 · 준비 완료";
+    }
+    select.onchange = render;
+    document.querySelectorAll("[data-angle]").forEach(
+      (b) =>
+        (b.onclick = () => {
+          yaw = Number(b.dataset.angle);
+          render();
+        }),
+    );
+    addEventListener("resize", render);
+    render();
+  </script>
+</html>
